@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Upload, Copy, Check, Trash2 } from 'lucide-react';
+import { Plus, Upload, Copy, Check, AlertCircle, Trash2 } from 'lucide-react';
 import {
   listSSHKeys, createSSHKey, registerSSHKey, deleteSSHKey,
 } from '../lib/platform-api';
@@ -14,6 +14,7 @@ import { queryKeys } from '../lib/query-keys';
 import { authService } from '../lib/auth';
 import { useNeedsTenant } from '../store/hooks';
 import { useI18n } from '../lib/i18n';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import {
   PageHeader, SearchField, SurfaceCard, TenantRequiredNotice,
   PageTable, PageTableHead, PageTableTh, PageTableBody, PageTableRow, PageTableTd,
@@ -29,7 +30,7 @@ export function SSHKeys() {
   const [createMode, setCreateMode] = useState<CreateMode>('generate');
   const [form, setForm] = useState({ name: '', public_key: '' });
   const [privateKeyModal, setPrivateKeyModal] = useState<{ name: string; pem: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { state: copyState, copy: copyToClipboard, reset: resetCopy } = useCopyToClipboard();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const queryClient = useQueryClient();
   const needsTenant = useNeedsTenant();
@@ -54,7 +55,7 @@ export function SSHKeys() {
       setCreateModal(false);
       resetForm();
       setPrivateKeyModal({ name: res.key.name, pem: res.private_key_pem });
-      setCopied(false);
+      resetCopy();
     },
   });
 
@@ -81,11 +82,9 @@ export function SSHKeys() {
     k.fingerprint?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleCopyPrivateKey = async () => {
+  const handleCopyPrivateKey = () => {
     if (!privateKeyModal) return;
-    await navigator.clipboard.writeText(privateKeyModal.pem);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    void copyToClipboard(privateKeyModal.pem);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -246,8 +245,18 @@ export function SSHKeys() {
             </pre>
             <div className="flex justify-end gap-3">
               <button type="button" onClick={handleCopyPrivateKey} className="btn-primary">
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-                {copied ? t('ssh.copied') : t('ssh.copy')}
+                {copyState === 'copied' ? (
+                  <Check size={16} />
+                ) : copyState === 'error' ? (
+                  <AlertCircle size={16} />
+                ) : (
+                  <Copy size={16} />
+                )}
+                {copyState === 'copied'
+                  ? t('ssh.copied')
+                  : copyState === 'error'
+                    ? t('common.copyError')
+                    : t('ssh.copy')}
               </button>
               <button type="button" onClick={() => setPrivateKeyModal(null)} className="btn-secondary">
                 {t('common.cancel')}
