@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/virtfoundry/core/internal/platform/branding"
 	"github.com/virtfoundry/core/internal/platform/cloudinit"
@@ -38,7 +40,7 @@ func videoDeviceForImage(image string) *kubevirtv1.VideoDevice {
 // KubeVirtDriver implements Driver using KubeVirt CRDs.
 type KubeVirtDriver struct {
 	virtClient kubecli.KubevirtClient
-	k8sClient  *kubernetes.Clientset
+	k8sClient  kubernetes.Interface
 	namespace  string
 }
 
@@ -83,11 +85,19 @@ func NewKubeVirtDriver(config KubeVirtConfig) (*KubeVirtDriver, error) {
 		namespace = "default"
 	}
 
+	return newKubeVirtDriver(virtClient, k8sClient, namespace), nil
+}
+
+func newKubeVirtDriver(virtClient kubecli.KubevirtClient, k8sClient kubernetes.Interface, namespace string) *KubeVirtDriver {
 	return &KubeVirtDriver{
 		virtClient: virtClient,
 		k8sClient:  k8sClient,
 		namespace:  namespace,
-	}, nil
+	}
+}
+
+func NewKubeVirtDriverForTest(virtClient kubecli.KubevirtClient, k8sClient kubernetes.Interface) *KubeVirtDriver {
+	return newKubeVirtDriver(virtClient, k8sClient, "default")
 }
 
 func (d *KubeVirtDriver) WithNamespace(ns string) *KubeVirtDriver {
@@ -428,6 +438,70 @@ func (d *KubeVirtDriver) GetHostResources(ctx context.Context) (map[string]inter
 		"memory": cluster.MemoryTotal,
 		"nodes":  cluster.NodeCount,
 	}, nil
+}
+
+func (d *KubeVirtDriver) ClusterMetrics(ctx context.Context) (*ClusterMetrics, error) {
+	nodes, err := d.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	out := &ClusterMetrics{
+		Nodes:           len(nodes.Items),
+		KubeletVersions: []string{},
+		OSImages:        []string{},
+		OSArchitectures: []string{},
+		CollectedAt:     time.Now().UTC(),
+	}
+
+	kubelet := map[string]struct{}{}
+	osImage := map[string]struct{}{}
+	osArch := map[string]struct{}{}
+
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+
+		if isNodeReady(node) {
+			out.NodesReady++
+		}
+		out.CPUCapacityMilli += node.Status.Capacity.Cpu().MilliValue()
+		out.CPUAllocatableMilli += node.Status.Allocatable.Cpu().MilliValue()
+		out.MemoryCapacity += node.Status.Capacity.Memory().Value()
+		out.MemoryAllocatable += node.Status.Allocatable.Memory().Value()
+
+		if v := node.Status.NodeInfo.KubeletVersion; v != "" {
+			kubelet[v] = struct{}{}
+		}
+		if v := node.Status.NodeInfo.OSImage; v != "" {
+			osImage[v] = struct{}{}
+		}
+		if v := node.Status.NodeInfo.Architecture; v != "" {
+			osArch[v] = struct{}{}
+		}
+	}
+
+	out.KubeletVersions = sortedKeys(kubelet)
+	out.OSImages = sortedKeys(osImage)
+	out.OSArchitectures = sortedKeys(osArch)
+	return out, nil
+}
+
+func isNodeReady(node *k8sv1.Node) bool {
+	for i := range node.Status.Conditions {
+		if node.Status.Conditions[i].Type == k8sv1.NodeReady {
+			return node.Status.Conditions[i].Status == k8sv1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func sortedKeys(set map[string]struct{}) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (d *KubeVirtDriver) CreateVolume(ctx context.Context, name string, size string) (*Volume, error) {

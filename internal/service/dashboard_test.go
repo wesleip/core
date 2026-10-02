@@ -6,8 +6,13 @@ import (
 	"time"
 
 	"github.com/virtfoundry/core/internal/auth"
+	"github.com/virtfoundry/core/internal/infra/hypervisor"
 	"github.com/virtfoundry/core/internal/platform"
 	"github.com/virtfoundry/core/internal/platform/store"
+	k8sv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestCountVMStates(t *testing.T) {
@@ -119,5 +124,63 @@ func TestNotificationsHidesVMNamesWithoutVMsRead(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected secret-vm notification with vms:read")
+	}
+}
+
+func TestDashboardSummaryHostsNilWithoutDriver(t *testing.T) {
+	svc, tenantID := seedDashboardVMs(t)
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead})
+	if err != nil {
+		t.Fatalf("DashboardSummary: %v", err)
+	}
+	if summary.Hosts != nil {
+		t.Fatalf("expected hosts=nil when driver is nil, got %+v", summary.Hosts)
+	}
+}
+
+func TestDashboardSummaryHostsPopulatedWithDriver(t *testing.T) {
+	st := store.NewMemory()
+	tenantID := store.NewID()
+	st.SaveTenant(&platform.Tenant{
+		ID: tenantID, Name: "acme", Slug: "acme", Namespace: "vf-acme",
+		State: "active", CreatedAt: store.Now(),
+	})
+	cs := fake.NewSimpleClientset(
+		&k8sv1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "n1"},
+			Status: k8sv1.NodeStatus{
+				Capacity: k8sv1.ResourceList{
+					k8sv1.ResourceCPU:    resource.MustParse("4"),
+					k8sv1.ResourceMemory: resource.MustParse("16Gi"),
+				},
+				Allocatable: k8sv1.ResourceList{
+					k8sv1.ResourceCPU:    resource.MustParse("3500m"),
+					k8sv1.ResourceMemory: resource.MustParse("14Gi"),
+				},
+				NodeInfo: k8sv1.NodeSystemInfo{
+					KubeletVersion: "v1.30.0",
+					OSImage:        "Ubuntu 22.04",
+					Architecture:   "amd64",
+				},
+				Conditions: []k8sv1.NodeCondition{
+					{Type: k8sv1.NodeReady, Status: k8sv1.ConditionTrue},
+				},
+			},
+		},
+	)
+	kv := hypervisor.NewKubeVirtDriverForTest(nil, cs)
+	svc := NewPlatformService(st, nil, kv, nil)
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead})
+	if err != nil {
+		t.Fatalf("DashboardSummary: %v", err)
+	}
+	if summary.Hosts == nil {
+		t.Fatal("expected hosts populated when driver returns metrics")
+	}
+	if summary.Hosts.Nodes != 1 || summary.Hosts.NodesReady != 1 {
+		t.Fatalf("nodes=%d ready=%d want 1/1", summary.Hosts.Nodes, summary.Hosts.NodesReady)
+	}
+	if summary.Hosts.CPUAllocatableMilli != 3500 {
+		t.Fatalf("cpu_allocatable_millicores=%d want 3500", summary.Hosts.CPUAllocatableMilli)
 	}
 }

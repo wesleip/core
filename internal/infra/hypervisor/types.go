@@ -90,6 +90,19 @@ type ClusterInfo struct {
 	MemoryTotal int64
 }
 
+type ClusterMetrics struct {
+	Nodes               int       `json:"nodes"`
+	NodesReady          int       `json:"nodes_ready"`
+	CPUCapacityMilli    int64     `json:"cpu_capacity_millicores"`
+	CPUAllocatableMilli int64     `json:"cpu_allocatable_millicores"`
+	MemoryCapacity      int64     `json:"memory_capacity_bytes"`
+	MemoryAllocatable   int64     `json:"memory_allocatable_bytes"`
+	KubeletVersions     []string  `json:"kubelet_versions"`
+	OSImages            []string  `json:"os_images"`
+	OSArchitectures     []string  `json:"os_architectures"`
+	CollectedAt         time.Time `json:"collected_at"`
+}
+
 // VMSnapshotInfo represents a KubeVirt VirtualMachineSnapshot.
 type VMSnapshotInfo struct {
 	Name      string

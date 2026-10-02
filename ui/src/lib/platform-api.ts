@@ -681,6 +681,20 @@ export interface DashboardSummary {
     updated_at?: string;
     path: string;
   }>;
+  hosts?: ClusterMetrics;
+}
+
+export interface ClusterMetrics {
+  nodes: number;
+  nodes_ready: number;
+  cpu_capacity_millicores: number;
+  cpu_allocatable_millicores: number;
+  memory_capacity_bytes: number;
+  memory_allocatable_bytes: number;
+  kubelet_versions: string[];
+  os_images: string[];
+  os_architectures: string[];
+  collected_at: string;
 }
 
 export interface SearchHit {

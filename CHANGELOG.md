@@ -6,6 +6,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard:** the `/dashboard` page now surfaces Kubernetes host telemetry (node count, ready nodes, allocatable CPU and memory, distinct kubelet versions and OS image) sourced from `core/v1/nodes` via the `KubeVirtDriver`. The new `GET /api/v1/dashboard/summary` field `hosts` is additive; older clients keep working. The section renders a disabled state when the cluster is unreachable (Forbidden, RBAC, no kubeconfig) so the endpoint never 500s. Tier 1 only — no new dependency.
+
 ## [0.11.3] - 2026-10-07
 
 ### Fixed

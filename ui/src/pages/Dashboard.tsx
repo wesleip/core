@@ -1,4 +1,4 @@
-import { HardDrive, Globe, Shield, Network, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { HardDrive, Globe, Shield, Network, Server, Cpu, MemoryStick, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -53,6 +53,17 @@ export function Dashboard() {
   ];
 
   const recentVms = summary?.recent_activity ?? [];
+  const hosts = summary?.hosts;
+  const hostsUnavailable = hosts === undefined;
+  const cpuCores = hosts ? (hosts.cpu_allocatable_millicores / 1000).toFixed(1) : '0.0';
+  const memGiB = hosts ? Math.round(hosts.memory_allocatable_bytes / (1024 * 1024 * 1024)) : 0;
+  const kubeletSummary = hosts?.kubelet_versions?.length
+    ? hosts.kubelet_versions.length === 1
+      ? hosts.kubelet_versions[0]
+      : `${hosts.kubelet_versions.length} versões`
+    : '';
+  const osImage = hosts?.os_images?.[0] ?? '';
+  const arch = hosts?.os_architectures?.[0] ?? '';
 
   if (needsTenant) {
     return (
@@ -219,6 +230,69 @@ export function Dashboard() {
                 </Link>
               ))}
             </div>
+          </SurfaceCard>
+
+          <SurfaceCard className="md:col-span-12" padding="md" title={t('dashboard.hostsTitle')}>
+            {hostsUnavailable ? (
+              <p className="text-on-surface-variant text-sm py-4">
+                {t('dashboard.hostsUnavailable')}
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
+                  <div className="flex flex-col items-center text-center gap-1.5">
+                    <Server size={20} className="text-primary" />
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.hostsNodes')}
+                    </span>
+                    <span className="font-headline text-headline-md font-bold text-on-surface">
+                      {hosts?.nodes ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center text-center gap-1.5">
+                    <CheckCircle size={20} className="text-tertiary" />
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.hostsNodesReady')}
+                    </span>
+                    <span className="font-headline text-headline-md font-bold text-on-surface">
+                      {hosts?.nodes_ready ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center text-center gap-1.5">
+                    <Cpu size={20} className="text-primary" />
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.hostsCpu')}
+                    </span>
+                    <span className="font-headline text-headline-md font-bold text-on-surface">
+                      {cpuCores}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center text-center gap-1.5">
+                    <MemoryStick size={20} className="text-primary" />
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.hostsMemory')}
+                    </span>
+                    <span className="font-headline text-headline-md font-bold text-on-surface">
+                      {memGiB} GiB
+                    </span>
+                  </div>
+                </div>
+                {(kubeletSummary || osImage || arch) && (
+                  <p
+                    className="text-xs text-on-surface-variant mt-4 font-data-mono"
+                    title={hosts?.collected_at}
+                  >
+                    {[
+                      kubeletSummary && `${t('dashboard.hostsKubelet')}: ${kubeletSummary}`,
+                      osImage && `${t('dashboard.hostsOs')}: ${osImage}`,
+                      arch && `${t('dashboard.hostsArch')}: ${arch}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
+              </>
+            )}
           </SurfaceCard>
         </div>
       </RefreshingPanel>

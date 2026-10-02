@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/virtfoundry/core/internal/auth"
+	"github.com/virtfoundry/core/internal/infra/hypervisor"
 	"github.com/virtfoundry/core/internal/platform"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // DashboardSummary aggregates tenant overview for the UI dashboard.
@@ -19,6 +21,7 @@ type DashboardSummary struct {
 	SecurityGroups DashboardResourceCount `json:"security_groups"`
 	Health         string                 `json:"health"`
 	RecentActivity []DashboardActivity    `json:"recent_activity"`
+	Hosts          *hypervisor.ClusterMetrics `json:"hosts,omitempty"`
 }
 
 type DashboardResourceCount struct {
@@ -63,6 +66,9 @@ func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string,
 		RecentActivity: []DashboardActivity{},
 	}
 	if !auth.HasPermission(perms, auth.PermVMsRead) {
+		if err := s.populateHosts(ctx, summary); err != nil {
+			return nil, err
+		}
 		return summary, nil
 	}
 	vms, err := s.ListVMs(ctx, tenantID)
@@ -77,7 +83,36 @@ func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string,
 	}
 	summary.Health = dashboardHealth(vmCount.errors, vmCount.transitional)
 	summary.RecentActivity = recentVMActivity(vms, 8)
+	if err := s.populateHosts(ctx, summary); err != nil {
+		return nil, err
+	}
 	return summary, nil
+}
+
+func (s *PlatformService) populateHosts(ctx context.Context, summary *DashboardSummary) error {
+	if s.kv == nil {
+		return nil
+	}
+	metrics, err := s.kv.ClusterMetrics(ctx)
+	if err != nil {
+		if isExpectedHostsError(err) {
+			return nil
+		}
+		return err
+	}
+	summary.Hosts = metrics
+	return nil
+}
+
+func isExpectedHostsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if k8serrors.IsForbidden(err) || k8serrors.IsUnauthorized(err) || k8serrors.IsServiceUnavailable(err) || k8serrors.IsTimeout(err) || k8serrors.IsServerTimeout(err) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host")
 }
 
 func (s *PlatformService) Search(ctx context.Context, tenantID, query string, perms []string) []SearchHit {
