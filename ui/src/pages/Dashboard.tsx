@@ -98,6 +98,8 @@ function addonTone(status: string): { dot: string; pulse: boolean; labelKey: Tra
 
 function AddonsHealthStrip({ addons }: { addons: { addons: Array<{ name: string; status: string; detail?: string }>; checked_at: string } }) {
   const { t } = useI18n();
+  const available = addons.addons.filter((a) => a.status === 'ok');
+  if (available.length === 0) return null;
   return (
     <div
       className="mt-4 pt-4 border-t border-outline-variant"
@@ -107,7 +109,7 @@ function AddonsHealthStrip({ addons }: { addons: { addons: Array<{ name: string;
         {t('dashboard.addonsTitle')}
       </p>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {addons.addons.map((a) => {
+        {available.map((a) => {
           const tone = addonTone(a.status);
           const labelKey = ADDON_LABEL_KEY[a.name] ?? null;
           const label = labelKey ? t(labelKey) : a.name;
