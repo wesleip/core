@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 ### Changed
 
 - **UI:** the dashboard host section is now titled "Cluster nodes" (was "Cluster host"), and the OS label is "OS image" / "Imagem do SO" (was "OS" / "SO"). The data is `Node.Status.NodeInfo.OSImage` from `core/v1/nodes` — i.e. the OS of the cluster nodes that run the workloads, **not** the OS of the developer's machine. In `kind` the value is the kind node image (Debian trixie); in kubeadm on bare metal it is the host OS (e.g. AlmaLinux); in AKS/EKS it is the managed node image (Ubuntu / Amazon Linux). No backend changes, no contract change.
+- **UI:** dashboard capacity labels now read "Allocatable CPU (cluster)" / "Allocatable memory (cluster)" (PT: "CPU alocável (cluster)" / "Memória alocável (cluster)"). The values are the **sum of `Status.Allocatable` across all nodes** — they grow with the node count, not with a single host.
 
 ## [0.11.3] - 2026-10-07
 
