@@ -22,6 +22,7 @@ type DashboardSummary struct {
 	Health         string                 `json:"health"`
 	RecentActivity []DashboardActivity    `json:"recent_activity"`
 	Hosts          *hypervisor.ClusterMetrics `json:"hosts,omitempty"`
+	Storage        *hypervisor.StorageSummary `json:"storage,omitempty"`
 }
 
 type DashboardResourceCount struct {
@@ -86,7 +87,25 @@ func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string,
 	if err := s.populateHosts(ctx, summary); err != nil {
 		return nil, err
 	}
+	if err := s.populateStorage(ctx, summary); err != nil {
+		return nil, err
+	}
 	return summary, nil
+}
+
+func (s *PlatformService) populateStorage(ctx context.Context, summary *DashboardSummary) error {
+	if s.kv == nil {
+		return nil
+	}
+	storage, err := s.kv.StorageSummary(ctx)
+	if err != nil {
+		if isExpectedHostsError(err) {
+			return nil
+		}
+		return err
+	}
+	summary.Storage = storage
+	return nil
 }
 
 func (s *PlatformService) populateHosts(ctx context.Context, summary *DashboardSummary) error {

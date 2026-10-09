@@ -682,6 +682,7 @@ export interface DashboardSummary {
     path: string;
   }>;
   hosts?: ClusterMetrics;
+  storage?: StorageSummary;
 }
 
 export interface ClusterMetrics {
@@ -703,6 +704,13 @@ export interface ClusterUsage {
   memory_usage_bytes: number;
   window_seconds: number;
   collected_at: string;
+}
+
+export interface StorageSummary {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  count: number;
 }
 
 export interface SearchHit {

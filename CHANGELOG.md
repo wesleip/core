@@ -20,6 +20,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 - **UI:** the "(cluster)" suffix on the CPU and Memory capacity labels was making the cards overflow and break into a second line when the sidebar is expanded. Reverted the labels to "Allocatable CPU" / "Allocatable memory" and moved the aggregation hint to a `title` tooltip on the card. The section title "Cluster nodes" already conveys the scope.
 - **UI:** the "Ready nodes" card now shows a small status badge in the top-right corner that summarises cluster node health at a glance: green "All ready" when every node is Ready, yellow "N degraded" when some are not, red "None ready" when zero are. The badge reuses the same colour tokens as the dashboard "Health" card. No new card, no new data — it just lifts `nodes` / `nodes_ready` from the existing payload.
 
+### Added
+
+- **Dashboard:** the stats row now includes a **Storage** card that aggregates tenant-scoped PVCs: `used / total` (auto-scaled to B/KiB/MiB/GiB/TiB), the percentage of used capacity, and the PVC count. New `GET /api/v1/dashboard/summary` field `storage` (additive). Backend reuses the existing PVC list path in `KubeVirtDriver`; empty store, memory mode, and Forbidden degrade gracefully.
+
 ### Added (backend — UI integration pending)
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.

@@ -118,6 +118,18 @@ type ClusterUsage struct {
 	CollectedAt   time.Time `json:"collected_at"`
 }
 
+// StorageSummary aggregates tenant-scoped PVC capacity from the cluster.
+// TotalBytes is the sum of every PVC's spec.resources.requests.storage
+// (capacity the user has reserved); UsedBytes is the subset of those PVCs
+// whose status.phase is Bound (actually attached to a pod). AvailableBytes is
+// Total - Used and is informational — there is no global "free" pool in K8s.
+type StorageSummary struct {
+	TotalBytes     int64 `json:"total_bytes"`
+	UsedBytes      int64 `json:"used_bytes"`
+	AvailableBytes int64 `json:"available_bytes"`
+	Count          int   `json:"count"`
+}
+
 // VMSnapshotInfo represents a KubeVirt VirtualMachineSnapshot.
 type VMSnapshotInfo struct {
 	Name      string

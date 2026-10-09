@@ -604,6 +604,40 @@ func isMetricsAbsent(err error) bool {
 		strings.Contains(msg, "the server could not find the requested resource")
 }
 
+// StorageSummary aggregates PVCs in the driver namespace into a single
+// tenant-scoped storage figure. Counts every PVC in the namespace (Bound or
+// Pending) toward TotalBytes (the reserved capacity the user has asked for),
+// and the Bound subset toward UsedBytes (actually attached). Returns nil
+// without error when the driver has no k8s client (memory store) so the
+// dashboard degrades gracefully.
+func (d *KubeVirtDriver) StorageSummary(ctx context.Context) (*StorageSummary, error) {
+	if d.k8sClient == nil {
+		return nil, nil
+	}
+	list, err := d.k8sClient.CoreV1().PersistentVolumeClaims(d.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list PVCs: %w", err)
+	}
+	out := &StorageSummary{Count: len(list.Items)}
+	for i := range list.Items {
+		pvc := &list.Items[i]
+		req := pvc.Spec.Resources.Requests.Storage()
+		if req == nil {
+			continue
+		}
+		bytes := req.Value()
+		out.TotalBytes += bytes
+		if pvc.Status.Phase == k8sv1.ClaimBound {
+			out.UsedBytes += bytes
+		}
+	}
+	out.AvailableBytes = out.TotalBytes - out.UsedBytes
+	return out, nil
+}
+
 func isNodeReady(node *k8sv1.Node) bool {
 	for i := range node.Status.Conditions {
 		if node.Status.Conditions[i].Type == k8sv1.NodeReady {

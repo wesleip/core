@@ -1,4 +1,4 @@
-import { HardDrive, Globe, Shield, Network, Server, Cpu, MemoryStick, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { HardDrive, Globe, Shield, Server, Cpu, MemoryStick, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -21,6 +21,15 @@ function usageTone(pct: number): string {
   if (pct >= 85) return 'bg-error';
   if (pct >= 60) return 'bg-warning';
   return 'bg-primary';
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 function UsageBar({ pct, collectedAt }: { pct: number; collectedAt?: string }) {
@@ -100,13 +109,18 @@ export function Dashboard() {
     { label: t('nav.volumes'), value: summary?.volumes.total ?? 0, icon: HardDrive },
     { label: t('nav.vpcs'), value: summary?.vpcs.total ?? 0, icon: Globe },
     { label: t('nav.securityGroups'), value: summary?.security_groups.total ?? 0, icon: Shield },
-    { label: t('nav.networks'), value: summary?.networks.total ?? 0, icon: Network },
   ];
 
   const recentVms = summary?.recent_activity ?? [];
   const hosts = summary?.hosts;
   const hostsUnavailable = hosts === undefined;
   const cpuCores = hosts ? (hosts.cpu_allocatable_millicores / 1000).toFixed(1) : '0.0';
+  const storage = summary?.storage;
+  const storageUsed = storage ? formatBytes(storage.used_bytes) : '—';
+  const storageTotal = storage ? formatBytes(storage.total_bytes) : '—';
+  const storagePct = storage && storage.total_bytes > 0
+    ? Math.round((storage.used_bytes / storage.total_bytes) * 100)
+    : null;
   const memGiB = hosts ? Math.round(hosts.memory_allocatable_bytes / (1024 * 1024 * 1024)) : 0;
   const kubeletSummary = hosts?.kubelet_versions?.length
     ? hosts.kubelet_versions.length === 1
@@ -229,6 +243,32 @@ export function Dashboard() {
                 </div>
               </SurfaceCard>
             ))}
+            <SurfaceCard
+              className="min-h-[120px] h-full"
+              padding="md"
+              title={t('dashboard.storageTitle')}
+            >
+              <div className="flex flex-col items-center text-center gap-1.5 h-full justify-center">
+                <HardDrive size={20} className="text-primary" />
+                {storage ? (
+                  <>
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.storageUsedOf').replace('{used}', storageUsed).replace('{total}', storageTotal)}
+                    </span>
+                    {storagePct !== null && (
+                      <span className="font-headline text-headline-md font-bold text-on-surface">
+                        {storagePct}%
+                      </span>
+                    )}
+                    <span className="text-[10px] text-on-surface-variant font-data-mono">
+                      {t('dashboard.storageCount').replace('{n}', String(storage.count))}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-on-surface-variant italic">—</span>
+                )}
+              </div>
+            </SurfaceCard>
           </div>
 
           <SurfaceCard className="md:col-span-5 flex flex-col overflow-hidden min-h-[280px]" padding="md" title="Recent activity">
