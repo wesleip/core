@@ -299,8 +299,8 @@ export function Dashboard() {
               </p>
             ) : (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter">
-                  <div className="flex flex-col items-center text-center gap-1.5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-gutter items-stretch">
+                  <div className="flex flex-col items-center text-center gap-1.5 h-full">
                     <Server size={20} className="text-primary" />
                     <span className="font-label text-on-surface-variant text-[10px] leading-tight">
                       {t('dashboard.hostsNodes')}
@@ -308,8 +308,9 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {hosts?.nodes ?? 0}
                     </span>
+                    <div className="flex-1" />
                   </div>
-                  <div className="relative flex flex-col items-center text-center gap-1.5">
+                  <div className="relative flex flex-col items-center text-center gap-1.5 h-full">
                     <CheckCircle size={20} className="text-tertiary" />
                     <span className="font-label text-on-surface-variant text-[10px] leading-tight">
                       {t('dashboard.hostsNodesReady')}
@@ -317,13 +318,14 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {hosts?.nodes_ready ?? 0}
                     </span>
+                    <div className="flex-1" />
                     <NodesHealthBadge
                       total={hosts?.nodes ?? 0}
                       ready={hosts?.nodes_ready ?? 0}
                     />
                   </div>
                   <div
-                    className="flex flex-col items-center text-center gap-1.5 min-w-0"
+                    className="flex flex-col items-center text-center gap-1.5 min-w-0 h-full"
                     title={t('dashboard.hostsAllocatableHint')}
                   >
                     <Cpu size={20} className="text-primary" />
@@ -333,6 +335,7 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {cpuCores}
                     </span>
+                    <div className="flex-1" />
                     {cpuUsageCores !== null ? (
                       <span className="text-[10px] text-on-surface-variant font-data-mono whitespace-nowrap">
                         {cpuUsageCores} {t('dashboard.hostsUsage')}
@@ -352,7 +355,7 @@ export function Dashboard() {
                     )}
                   </div>
                   <div
-                    className="flex flex-col items-center text-center gap-1.5 min-w-0"
+                    className="flex flex-col items-center text-center gap-1.5 min-w-0 h-full"
                     title={t('dashboard.hostsAllocatableHint')}
                   >
                     <MemoryStick size={20} className="text-primary" />
@@ -362,6 +365,7 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {memGiB} GiB
                     </span>
+                    <div className="flex-1" />
                     {memUsageGiB !== null ? (
                       <span className="text-[10px] text-on-surface-variant font-data-mono whitespace-nowrap">
                         {memUsageGiB} GiB {t('dashboard.hostsUsage')}
