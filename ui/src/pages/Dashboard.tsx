@@ -244,28 +244,30 @@ export function Dashboard() {
               </SurfaceCard>
             ))}
             <SurfaceCard
-              className="min-h-[120px] h-full"
+              className="min-h-[120px] h-full [&>div:last-child]:h-full [&>div:last-child]:flex [&>div:last-child]:items-center [&>div:last-child]:justify-center"
               padding="md"
-              title={t('dashboard.storageTitle')}
             >
-              <div className="flex flex-col items-center text-center gap-1.5 h-full justify-center">
+              <div className="flex flex-col items-center text-center gap-1.5">
                 <HardDrive size={20} className="text-primary" />
-                {storage ? (
+                {storage && storagePct !== null ? (
                   <>
-                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight whitespace-nowrap">
                       {t('dashboard.storageUsedOf').replace('{used}', storageUsed).replace('{total}', storageTotal)}
                     </span>
-                    {storagePct !== null && (
-                      <span className="font-headline text-headline-md font-bold text-on-surface">
-                        {storagePct}%
-                      </span>
-                    )}
+                    <span className="font-headline text-headline-md font-bold text-on-surface">
+                      {storagePct}%
+                    </span>
                     <span className="text-[10px] text-on-surface-variant font-data-mono">
                       {t('dashboard.storageCount').replace('{n}', String(storage.count))}
                     </span>
                   </>
                 ) : (
-                  <span className="text-[10px] text-on-surface-variant italic">—</span>
+                  <>
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                      {t('dashboard.storageTitle')}
+                    </span>
+                    <span className="font-headline text-headline-md font-bold text-on-surface">—</span>
+                  </>
                 )}
               </div>
             </SurfaceCard>
