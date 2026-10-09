@@ -23,7 +23,7 @@ function usageTone(pct: number): string {
   return 'bg-primary';
 }
 
-function UsageBar({ pct, label, collectedAt }: { pct: number; label: string; collectedAt?: string }) {
+function UsageBar({ pct, collectedAt }: { pct: number; collectedAt?: string }) {
   const clamped = Math.min(100, Math.max(0, pct));
   return (
     <div className="w-full mt-1" title={collectedAt}>
@@ -33,8 +33,8 @@ function UsageBar({ pct, label, collectedAt }: { pct: number; label: string; col
           style={{ width: `${clamped}%` }}
         />
       </div>
-      <p className="text-[10px] text-on-surface-variant mt-1 font-data-mono">
-        {clamped}% {label}
+      <p className="text-[10px] text-on-surface-variant mt-1 font-data-mono text-center">
+        {clamped}%
       </p>
     </div>
   );
@@ -333,12 +333,15 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {cpuCores}
                     </span>
-                    {cpuUsagePct !== null && cpuUsageCores !== null ? (
-                      <UsageBar
-                        pct={cpuUsagePct}
-                        label={`${t('dashboard.hostsUsage')} · ${cpuUsageCores}`}
-                        collectedAt={usage?.collected_at}
-                      />
+                    {cpuUsageCores !== null ? (
+                      <span className="text-[10px] text-on-surface-variant font-data-mono whitespace-nowrap">
+                        {cpuUsageCores} {t('dashboard.hostsUsage')}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-on-surface-variant" />
+                    )}
+                    {cpuUsagePct !== null ? (
+                      <UsageBar pct={cpuUsagePct} collectedAt={usage?.collected_at} />
                     ) : (
                       <span
                         className="text-[10px] text-on-surface-variant italic"
@@ -359,12 +362,15 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {memGiB} GiB
                     </span>
-                    {memUsagePct !== null && memUsageGiB !== null ? (
-                      <UsageBar
-                        pct={memUsagePct}
-                        label={`${t('dashboard.hostsUsage')} · ${memUsageGiB} GiB`}
-                        collectedAt={usage?.collected_at}
-                      />
+                    {memUsageGiB !== null ? (
+                      <span className="text-[10px] text-on-surface-variant font-data-mono whitespace-nowrap">
+                        {memUsageGiB} GiB {t('dashboard.hostsUsage')}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-on-surface-variant" />
+                    )}
+                    {memUsagePct !== null ? (
+                      <UsageBar pct={memUsagePct} collectedAt={usage?.collected_at} />
                     ) : (
                       <span
                         className="text-[10px] text-on-surface-variant italic"
