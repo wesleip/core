@@ -56,11 +56,20 @@ type KubeVirtDriver struct {
 	// that into a degraded state.
 	usageCacheMu sync.Mutex
 	usageCache   *clusterUsageCacheEntry
+
+	// addonsCache memoises AddonsHealth between dashboard polls.
+	addonsCacheMu sync.Mutex
+	addonsCache   *addonsCacheEntry
 }
 
 type clusterUsageCacheEntry struct {
 	value *ClusterUsage
 	err   error
+	at    time.Time
+}
+
+type addonsCacheEntry struct {
+	value *AddonsHealth
 	at    time.Time
 }
 
@@ -636,6 +645,79 @@ func (d *KubeVirtDriver) StorageSummary(ctx context.Context) (*StorageSummary, e
 	}
 	out.AvailableBytes = out.TotalBytes - out.UsedBytes
 	return out, nil
+}
+
+// AddonsHealth probes each critical cluster dependency (KubeVirt, CDI, Multus,
+// metrics-server, networking) and reports whether its API group is registered.
+// Results are memoised for the same 30s window as ClusterUsage so a dashboard
+// poll only triggers one discovery round-trip per cache miss.
+func (d *KubeVirtDriver) AddonsHealth(ctx context.Context) (*AddonsHealth, error) {
+	d.addonsCacheMu.Lock()
+	cached := d.addonsCache
+	if cached != nil && time.Since(cached.at) < clusterUsageTTL {
+		d.addonsCacheMu.Unlock()
+		return cached.value, nil
+	}
+	d.addonsCacheMu.Unlock()
+
+	value := d.probeAddons(ctx)
+
+	d.addonsCacheMu.Lock()
+	d.addonsCache = &addonsCacheEntry{value: value, at: time.Now()}
+	d.addonsCacheMu.Unlock()
+
+	return value, nil
+}
+
+// probeAddons runs one discovery call per addon. Each check is independent —
+// one absent addon never blocks the rest. Timeouts short to keep the dashboard
+// poll bounded.
+func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
+	addons := []struct {
+		name         string
+		groupVersion string
+	}{
+		{"kubevirt", "kubevirt.io/v1"},
+		{"cdi", "cdi.kubevirt.io/v1beta1"},
+		{"multus", "k8s.cni.cncf.io/v1"},
+		{"metrics-server", "metrics.k8s.io/v1beta1"},
+		{"networking", "virtfoundry.io/v1alpha1"},
+	}
+
+	out := &AddonsHealth{
+		Addons:    make([]AddonHealth, 0, len(addons)),
+		CheckedAt: time.Now().UTC(),
+	}
+	if d.k8sClient == nil {
+		for _, a := range addons {
+			out.Addons = append(out.Addons, AddonHealth{Name: a.name, Status: "unknown", Detail: "no client"})
+		}
+		return out
+	}
+
+	discovery := d.k8sClient.Discovery()
+	for _, a := range addons {
+		_, err := discovery.ServerResourcesForGroupVersion(a.groupVersion)
+		out.Addons = append(out.Addons, classifyAddon(a.name, err))
+	}
+	return out
+}
+
+// classifyAddon maps a discovery error into the three dashboard states.
+func classifyAddon(name string, err error) AddonHealth {
+	if err == nil {
+		return AddonHealth{Name: name, Status: "ok"}
+	}
+	if errors.IsNotFound(err) {
+		return AddonHealth{Name: name, Status: "absent", Detail: "not installed"}
+	}
+	if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+		return AddonHealth{Name: name, Status: "unknown", Detail: "forbidden"}
+	}
+	if errors.IsTimeout(err) || errors.IsServerTimeout(err) || errors.IsServiceUnavailable(err) {
+		return AddonHealth{Name: name, Status: "unknown", Detail: "timeout"}
+	}
+	return AddonHealth{Name: name, Status: "unknown", Detail: "check failed"}
 }
 
 func isNodeReady(node *k8sv1.Node) bool {

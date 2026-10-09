@@ -24,6 +24,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 - **Dashboard:** the stats row now includes a **Storage** card that aggregates tenant-scoped PVCs: `used / total` (auto-scaled to B/KiB/MiB/GiB/TiB), the percentage of used capacity, and the PVC count. New `GET /api/v1/dashboard/summary` field `storage` (additive). Backend reuses the existing PVC list path in `KubeVirtDriver`; empty store, memory mode, and Forbidden degrade gracefully.
 
+### Added
+
+- **Dashboard:** the Cluster nodes section now includes a **Cluster addons** strip with one coloured dot per critical dependency: KubeVirt, CDI, Multus, metrics-server, networking. Statuses: green (installed and reachable), grey (absent — CRD/API not registered), yellow (unreachable — Forbidden or transient failure). New `GET /api/v1/dashboard/summary` field `addons` (additive) with a 30s in-memory cache. Discovery calls are not AST-scanned by `rbac_contract_test.go` and so do not require a contract entry. Memory mode and nil client render every dot as yellow.
+
 ### Added (backend — UI integration pending)
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.

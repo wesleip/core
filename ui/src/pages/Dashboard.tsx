@@ -82,6 +82,54 @@ function NodesHealthBadge({ total, ready }: { total: number; ready: number }) {
   );
 }
 
+const ADDON_LABEL_KEY: Record<string, TranslationKey> = {
+  kubevirt: 'dashboard.addonsKubevirt',
+  cdi: 'dashboard.addonsCdi',
+  multus: 'dashboard.addonsMultus',
+  'metrics-server': 'dashboard.addonsMetricsServer',
+  networking: 'dashboard.addonsNetworking',
+};
+
+function addonTone(status: string): { dot: string; labelKey: TranslationKey } {
+  if (status === 'ok') return { dot: 'bg-success', labelKey: 'dashboard.addonsStatusOk' };
+  if (status === 'absent') return { dot: 'bg-on-surface-variant/30', labelKey: 'dashboard.addonsStatusAbsent' };
+  return { dot: 'bg-warning', labelKey: 'dashboard.addonsStatusUnknown' };
+}
+
+function AddonsHealthStrip({ addons }: { addons: { addons: Array<{ name: string; status: string; detail?: string }>; checked_at: string } }) {
+  const { t } = useI18n();
+  return (
+    <div
+      className="mt-4 pt-4 border-t border-outline-variant"
+      title={addons.checked_at}
+    >
+      <p className="text-[10px] font-label uppercase text-on-surface-variant mb-2">
+        {t('dashboard.addonsTitle')}
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {addons.addons.map((a) => {
+          const tone = addonTone(a.status);
+          const labelKey = ADDON_LABEL_KEY[a.name] ?? null;
+          const label = labelKey ? t(labelKey) : a.name;
+          const statusLabel = t(tone.labelKey);
+          return (
+            <div
+              key={a.name}
+              className="inline-flex items-center gap-1.5"
+              title={a.detail ?? statusLabel}
+            >
+              <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+              <span className="text-xs text-on-surface-variant font-data-mono">
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { t } = useI18n();
   const needsTenant = useNeedsTenant();
@@ -441,6 +489,7 @@ export function Dashboard() {
                       .join(' · ')}
                   </p>
                 )}
+                {summary?.addons && <AddonsHealthStrip addons={summary.addons} />}
               </>
             )}
           </SurfaceCard>

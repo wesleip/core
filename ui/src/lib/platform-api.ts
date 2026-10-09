@@ -683,6 +683,7 @@ export interface DashboardSummary {
   }>;
   hosts?: ClusterMetrics;
   storage?: StorageSummary;
+  addons?: AddonsHealth;
 }
 
 export interface ClusterMetrics {
@@ -711,6 +712,17 @@ export interface StorageSummary {
   used_bytes: number;
   available_bytes: number;
   count: number;
+}
+
+export interface AddonHealth {
+  name: string;
+  status: 'ok' | 'absent' | 'unknown';
+  detail?: string;
+}
+
+export interface AddonsHealth {
+  addons: AddonHealth[];
+  checked_at: string;
 }
 
 export interface SearchHit {

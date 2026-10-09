@@ -130,6 +130,29 @@ type StorageSummary struct {
 	Count          int   `json:"count"`
 }
 
+// AddonHealth is the status of one critical VirtFoundry dependency on the
+// cluster (KubeVirt, CDI, Multus, metrics-server, networking). The dashboard
+// renders a single coloured dot per addon.
+type AddonHealth struct {
+	// Name is a stable identifier ("kubevirt", "cdi", "multus",
+	// "metrics-server", "networking") used by the UI for i18n lookup.
+	Name string `json:"name"`
+	// Status is one of: "ok" (installed and reachable), "absent" (CRD/API
+	// not registered on the cluster), "unknown" (Forbidden or transient
+	// failure — the UI shows a neutral dot in this case).
+	Status string `json:"status"`
+	// Detail is a short human-readable reason, sanitised server-side. It is
+	// only populated when Status != "ok".
+	Detail string `json:"detail,omitempty"`
+}
+
+// AddonsHealth is the per-check summary of every addon the dashboard tracks.
+// CheckedAt lets the UI show how stale the dots are.
+type AddonsHealth struct {
+	Addons    []AddonHealth `json:"addons"`
+	CheckedAt time.Time     `json:"checked_at"`
+}
+
 // VMSnapshotInfo represents a KubeVirt VirtualMachineSnapshot.
 type VMSnapshotInfo struct {
 	Name      string
