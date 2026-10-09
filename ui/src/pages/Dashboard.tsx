@@ -65,7 +65,7 @@ function NodesHealthBadge({ total, ready }: { total: number; ready: number }) {
     : t(tone.label);
   return (
     <span
-      className={`absolute top-0 right-0 px-2 py-0.5 rounded-full font-label-sm border whitespace-nowrap ${tone.badge}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full font-label-sm border whitespace-nowrap ${tone.badge}`}
       title={`${ready} / ${total}`}
     >
       {label}
@@ -310,7 +310,7 @@ export function Dashboard() {
                     </span>
                     <div className="flex-1" />
                   </div>
-                  <div className="relative flex flex-col items-center text-center gap-1.5 h-full">
+                  <div className="flex flex-col items-center text-center gap-1.5 h-full">
                     <CheckCircle size={20} className="text-tertiary" />
                     <span className="font-label text-on-surface-variant text-[10px] leading-tight">
                       {t('dashboard.hostsNodesReady')}
