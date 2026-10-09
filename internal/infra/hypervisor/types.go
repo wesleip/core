@@ -101,6 +101,21 @@ type ClusterMetrics struct {
 	OSImages            []string  `json:"os_images"`
 	OSArchitectures     []string  `json:"os_architectures"`
 	CollectedAt         time.Time `json:"collected_at"`
+
+	// Usage is populated when metrics-server is reachable. Available is false when
+	// the API is absent, the call is Forbidden, or the cluster has no Ready nodes
+	// to report. The dashboard renders a degraded state instead of failing the
+	// summary when Available is false.
+	Usage *ClusterUsage `json:"usage,omitempty"`
+}
+
+// ClusterUsage is the sum of metrics.k8s.io/v1beta1 NodeMetrics across all
+// nodes, served by metrics-server. Tier 2 of the dashboard host metrics spec.
+type ClusterUsage struct {
+	CPUUsageMilli int64     `json:"cpu_usage_millicores"`
+	MemoryUsage   int64     `json:"memory_usage_bytes"`
+	WindowSeconds int64     `json:"window_seconds"`
+	CollectedAt   time.Time `json:"collected_at"`
 }
 
 // VMSnapshotInfo represents a KubeVirt VirtualMachineSnapshot.

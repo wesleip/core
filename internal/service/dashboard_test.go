@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,7 +15,9 @@ import (
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 )
 
 func TestCountVMStates(t *testing.T) {
@@ -183,4 +188,73 @@ func TestDashboardSummaryHostsPopulatedWithDriver(t *testing.T) {
 	if summary.Hosts.CPUAllocatableMilli != 3500 {
 		t.Fatalf("cpu_allocatable_millicores=%d want 3500", summary.Hosts.CPUAllocatableMilli)
 	}
+	if summary.Hosts.Usage != nil {
+		t.Fatalf("expected usage=nil with fake clientset (no RESTClient), got %+v", summary.Hosts.Usage)
+	}
+}
+
+func TestDashboardSummaryUsagePopulated(t *testing.T) {
+	st := store.NewMemory()
+	tenantID := store.NewID()
+	st.SaveTenant(&platform.Tenant{
+		ID: tenantID, Name: "acme", Slug: "acme", Namespace: "vf-acme",
+		State: "active", CreatedAt: store.Now(),
+	})
+	node := &k8sv1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "n1"},
+		Status: k8sv1.NodeStatus{
+			Allocatable: k8sv1.ResourceList{
+				k8sv1.ResourceCPU:    resource.MustParse("3500m"),
+				k8sv1.ResourceMemory: resource.MustParse("14Gi"),
+			},
+			Conditions: []k8sv1.NodeCondition{
+				{Type: k8sv1.NodeReady, Status: k8sv1.ConditionTrue},
+			},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/nodes":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items": [` + nodeJSON(node) + `]}`))
+		case "/apis/metrics.k8s.io/v1beta1/nodes":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items": [{"usage": {"cpu": "1234m", "memory": "7Gi"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := &rest.Config{Host: srv.URL}
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		t.Fatalf("build client: %v", err)
+	}
+	cs.Discovery() // warm-up: not strictly required, documents intent
+
+	kv := hypervisor.NewKubeVirtDriverForTest(nil, cs)
+	svc := NewPlatformService(st, nil, kv, nil)
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead})
+	if err != nil {
+		t.Fatalf("DashboardSummary: %v", err)
+	}
+	if summary.Hosts == nil {
+		t.Fatal("expected hosts populated")
+	}
+	if summary.Hosts.Usage == nil {
+		t.Fatal("expected usage populated when metrics.k8s.io is reachable")
+	}
+	if summary.Hosts.Usage.CPUUsageMilli != 1234 {
+		t.Fatalf("cpu_usage_millicores=%d want 1234", summary.Hosts.Usage.CPUUsageMilli)
+	}
+	if summary.Hosts.Usage.MemoryUsage != 7*1024*1024*1024 {
+		t.Fatalf("memory_usage_bytes=%d want 7Gi", summary.Hosts.Usage.MemoryUsage)
+	}
+}
+
+func nodeJSON(n *k8sv1.Node) string {
+	n.TypeMeta = metav1.TypeMeta{Kind: "Node", APIVersion: "v1"}
+	b, _ := json.Marshal(n)
+	return string(b)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,13 @@ const (
 	defaultVMImage      = "quay.io/kubevirt/cirros-container-disk-demo"
 	virtioContainerDisk = "quay.io/kubevirt/virtio-container-disk:v1.8.4"
 	windowsMachineType  = "q35"
+
+	// clusterUsageTTL bounds how often we hit metrics.k8s.io. metrics-server itself
+	// scrapes the kubelet every ~15s; a 30s server-side cache matches the design
+	// spec (Tier 2) and keeps the dashboard poll cheap.
+	clusterUsageTTL = 30 * time.Second
+	// clusterUsageCallTimeout caps a single metrics.k8s.io round-trip.
+	clusterUsageCallTimeout = 4 * time.Second
 )
 
 // Cirros only drives the default VGA device; virtio-gpu yields a black VNC screen.
@@ -42,6 +50,18 @@ type KubeVirtDriver struct {
 	virtClient kubecli.KubevirtClient
 	k8sClient  kubernetes.Interface
 	namespace  string
+
+	// usageCache memoises ClusterUsage between dashboard polls. A nil value with
+	// a non-nil err represents "metrics-server unreachable"; the dashboard turns
+	// that into a degraded state.
+	usageCacheMu sync.Mutex
+	usageCache   *clusterUsageCacheEntry
+}
+
+type clusterUsageCacheEntry struct {
+	value *ClusterUsage
+	err   error
+	at    time.Time
 }
 
 type KubeVirtConfig struct {
@@ -484,6 +504,104 @@ func (d *KubeVirtDriver) ClusterMetrics(ctx context.Context) (*ClusterMetrics, e
 	out.OSImages = sortedKeys(osImage)
 	out.OSArchitectures = sortedKeys(osArch)
 	return out, nil
+}
+
+// ClusterUsage aggregates metrics.k8s.io/v1beta1 NodeMetrics into a single
+// cluster-wide usage figure (CPU millicores + memory bytes). It returns
+// (nil, nil) when metrics-server is absent, Forbidden, or when the request
+// fails with a transient server error — the dashboard must keep working
+// when the cluster does not expose usage data. Genuine errors (parse failure,
+// etc.) are propagated.
+func (d *KubeVirtDriver) ClusterUsage(ctx context.Context) (*ClusterUsage, error) {
+	d.usageCacheMu.Lock()
+	cached := d.usageCache
+	if cached != nil && time.Since(cached.at) < clusterUsageTTL {
+		d.usageCacheMu.Unlock()
+		return cached.value, cached.err
+	}
+	d.usageCacheMu.Unlock()
+
+	value, err := d.fetchClusterUsage(ctx)
+
+	d.usageCacheMu.Lock()
+	d.usageCache = &clusterUsageCacheEntry{value: value, err: err, at: time.Now()}
+	d.usageCacheMu.Unlock()
+
+	return value, err
+}
+
+// fetchClusterUsage performs a single metrics.k8s.io round-trip. It is not
+// covered by rbac_contract_test.go (the test only sees typed client-go
+// calls; metrics.k8s.io is reached via the discovery REST client, which is
+// an accepted pattern — see the dynamic-client note in docs/rbac-contract.yaml).
+func (d *KubeVirtDriver) fetchClusterUsage(ctx context.Context) (*ClusterUsage, error) {
+	if d.k8sClient == nil {
+		return nil, nil
+	}
+	restClient := d.k8sClient.Discovery().RESTClient()
+	if restClient == nil {
+		return nil, nil
+	}
+	callCtx, cancel := context.WithTimeout(ctx, clusterUsageCallTimeout)
+	defer cancel()
+
+	raw, err := restClient.
+		Get().
+		AbsPath("/apis/metrics.k8s.io/v1beta1/nodes").
+		Do(callCtx).
+		Raw()
+	if err != nil {
+		if isMetricsAbsent(err) {
+			log.Printf("[cluster-usage] metrics.k8s.io unavailable: %v", err)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get metrics.k8s.io nodes: %w", err)
+	}
+
+	var list struct {
+		Items []struct {
+			Usage struct {
+				CPU    string `json:"cpu"`
+				Memory string `json:"memory"`
+			} `json:"usage"`
+			Timestamp string `json:"timestamp"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, fmt.Errorf("decode metrics.k8s.io nodes: %w", err)
+	}
+
+	out := &ClusterUsage{
+		WindowSeconds: int64(clusterUsageTTL / time.Second),
+		CollectedAt:   time.Now().UTC(),
+	}
+	for _, item := range list.Items {
+		cpu := resource.MustParse(item.Usage.CPU)
+		mem := resource.MustParse(item.Usage.Memory)
+		out.CPUUsageMilli += cpu.MilliValue()
+		out.MemoryUsage += mem.Value()
+	}
+	return out, nil
+}
+
+// isMetricsAbsent recognises the failure modes the dashboard tolerates:
+//   - the API is not registered (404, metrics-server not installed)
+//   - the ServiceAccount is not granted access (403)
+//   - the API server is overloaded or briefly unavailable (5xx, timeout)
+func isMetricsAbsent(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.IsNotFound(err) || errors.IsForbidden(err) || errors.IsUnauthorized(err) {
+		return true
+	}
+	if errors.IsServiceUnavailable(err) || errors.IsTimeout(err) || errors.IsServerTimeout(err) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "the server could not find the requested resource")
 }
 
 func isNodeReady(node *k8sv1.Node) bool {

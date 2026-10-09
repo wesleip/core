@@ -101,6 +101,11 @@ func (s *PlatformService) populateHosts(ctx context.Context, summary *DashboardS
 		return err
 	}
 	summary.Hosts = metrics
+	usage, err := s.kv.ClusterUsage(ctx)
+	if err != nil {
+		return err
+	}
+	summary.Hosts.Usage = usage
 	return nil
 }
 
