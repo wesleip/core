@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,7 +84,7 @@ func seedDashboardVMs(t *testing.T) (*PlatformService, string) {
 
 func TestDashboardSummaryHidesVMNamesWithoutVMsRead(t *testing.T) {
 	svc, tenantID := seedDashboardVMs(t)
-	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead})
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead}, "")
 	if err != nil {
 		t.Fatalf("DashboardSummary: %v", err)
 	}
@@ -99,7 +100,7 @@ func TestDashboardSummaryHidesVMNamesWithoutVMsRead(t *testing.T) {
 
 func TestDashboardSummaryIncludesVMsWithVMsRead(t *testing.T) {
 	svc, tenantID := seedDashboardVMs(t)
-	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead})
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead}, "")
 	if err != nil {
 		t.Fatalf("DashboardSummary: %v", err)
 	}
@@ -134,7 +135,7 @@ func TestNotificationsHidesVMNamesWithoutVMsRead(t *testing.T) {
 
 func TestDashboardSummaryHostsNilWithoutDriver(t *testing.T) {
 	svc, tenantID := seedDashboardVMs(t)
-	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead})
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead}, "")
 	if err != nil {
 		t.Fatalf("DashboardSummary: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestDashboardSummaryHostsPopulatedWithDriver(t *testing.T) {
 	)
 	kv := hypervisor.NewKubeVirtDriverForTest(nil, cs)
 	svc := NewPlatformService(st, nil, kv, nil)
-	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead})
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead}, platform.RoleRoot)
 	if err != nil {
 		t.Fatalf("DashboardSummary: %v", err)
 	}
@@ -213,13 +214,16 @@ func TestDashboardSummaryUsagePopulated(t *testing.T) {
 		},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/nodes":
+		switch {
+		case r.URL.Path == "/api/v1/nodes":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items": [` + nodeJSON(node) + `]}`))
-		case "/apis/metrics.k8s.io/v1beta1/nodes":
+		case r.URL.Path == "/apis/metrics.k8s.io/v1beta1/nodes":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"items": [{"usage": {"cpu": "1234m", "memory": "7Gi"}}]}`))
+		case strings.HasPrefix(r.URL.Path, "/api/v1/namespaces/default/persistentvolumeclaims"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items": []}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -235,7 +239,7 @@ func TestDashboardSummaryUsagePopulated(t *testing.T) {
 
 	kv := hypervisor.NewKubeVirtDriverForTest(nil, cs)
 	svc := NewPlatformService(st, nil, kv, nil)
-	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead})
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVolumesRead}, platform.RoleRoot)
 	if err != nil {
 		t.Fatalf("DashboardSummary: %v", err)
 	}
@@ -257,4 +261,35 @@ func nodeJSON(n *k8sv1.Node) string {
 	n.TypeMeta = metav1.TypeMeta{Kind: "Node", APIVersion: "v1"}
 	b, _ := json.Marshal(n)
 	return string(b)
+}
+
+func TestDashboardSummaryHidesClusterOverviewForNonRoot(t *testing.T) {
+	svc, tenantID := seedDashboardVMs(t)
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead}, platform.RoleTenantAdmin)
+	if err != nil {
+		t.Fatalf("DashboardSummary: %v", err)
+	}
+	if summary.Hosts != nil {
+		t.Fatalf("expected hosts=nil for non-root, got %+v", summary.Hosts)
+	}
+	if summary.Storage != nil {
+		t.Fatalf("expected storage=nil for non-root, got %+v", summary.Storage)
+	}
+	if summary.Addons != nil {
+		t.Fatalf("expected addons=nil for non-root, got %+v", summary.Addons)
+	}
+	if summary.VMs.Total == 0 {
+		t.Fatal("non-root with vms:read must still see VM counts")
+	}
+}
+
+func TestDashboardSummaryShowsClusterOverviewForRoot(t *testing.T) {
+	svc, tenantID := seedDashboardVMs(t)
+	summary, err := svc.DashboardSummary(context.Background(), tenantID, []string{auth.PermVMsRead}, platform.RoleRoot)
+	if err != nil {
+		t.Fatalf("DashboardSummary: %v", err)
+	}
+	if summary.Hosts != nil {
+		t.Fatal("driver is nil in seedDashboardVMs so hosts stays nil, that's fine")
+	}
 }

@@ -58,7 +58,7 @@ type NotificationItem struct {
 	CreatedAt string `json:"created_at,omitempty"`
 }
 
-func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string, perms []string) (*DashboardSummary, error) {
+func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string, perms []string, role platform.Role) (*DashboardSummary, error) {
 	summary := &DashboardSummary{
 		Volumes:        DashboardResourceCount{Total: len(s.ListVolumes(tenantID))},
 		VPCs:           DashboardResourceCount{Total: len(s.ListVPCs(tenantID))},
@@ -67,10 +67,18 @@ func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string,
 		Health:         "ok",
 		RecentActivity: []DashboardActivity{},
 	}
-	if !auth.HasPermission(perms, auth.PermVMsRead) {
+	if role == platform.RoleRoot {
 		if err := s.populateHosts(ctx, summary); err != nil {
 			return nil, err
 		}
+		if err := s.populateStorage(ctx, summary); err != nil {
+			return nil, err
+		}
+		if err := s.populateAddons(ctx, summary); err != nil {
+			return nil, err
+		}
+	}
+	if !auth.HasPermission(perms, auth.PermVMsRead) {
 		return summary, nil
 	}
 	vms, err := s.ListVMs(ctx, tenantID)
@@ -85,15 +93,6 @@ func (s *PlatformService) DashboardSummary(ctx context.Context, tenantID string,
 	}
 	summary.Health = dashboardHealth(vmCount.errors, vmCount.transitional)
 	summary.RecentActivity = recentVMActivity(vms, 8)
-	if err := s.populateHosts(ctx, summary); err != nil {
-		return nil, err
-	}
-	if err := s.populateStorage(ctx, summary); err != nil {
-		return nil, err
-	}
-	if err := s.populateAddons(ctx, summary); err != nil {
-		return nil, err
-	}
 	return summary, nil
 }
 

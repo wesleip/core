@@ -732,8 +732,12 @@ func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
 	if d.k8sClient == nil {
 		return out
 	}
+	restClient := d.k8sClient.Discovery().RESTClient()
+	if restClient == nil {
+		return out
+	}
 
-	raw, err := d.k8sClient.Discovery().RESTClient().
+	raw, err := restClient.
 		Get().
 		AbsPath("/apis/apiextensions.k8s.io/v1/customresourcedefinitions").
 		Do(ctx).
