@@ -32,6 +32,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 - **API:** the addons probe is now **dynamic** — `KubeVirtDriver.probeAddons` lists every `CustomResourceDefinition` and groups by the `app.kubernetes.io/name` label (the standard Helm/Kustomize convention). The hard-coded list (kubevirt, cdi, multus, metrics-server, networking, cert-manager) is gone; any chart that follows the convention appears automatically. Status is `ok` when at least one CRD with the same name has the `Established=True` condition, `degraded` otherwise. CRDs without the label are ignored. The UI keeps the i18n map for the well-known names and falls back to the raw `app.kubernetes.io/name` value for everything else.
 
+### Changed
+
+- **API:** `probeAddons` now resolves the addon name through three Helm labels (`app.kubernetes.io/name`, then `part-of`, then `component`) and falls back to a substring match against a small alias table (`kubevirt.io` → `kubevirt`, `cdi.kubevirt.io` → `cdi`, `k8s.cni.cncf.io` → `multus`, `cert-manager.io` → `cert-manager`, `istio.io` → `istio`, `monitoring.coreos.com` → `prometheus`, `tekton.dev` → `tekton`, `argoproj.io` → `argocd`). Add-ons installed without Helm labels still surface, and a CRD whose group has no alias is silently skipped (no false positives).
+
 ### Added (backend — UI integration pending)
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.

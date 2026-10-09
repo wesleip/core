@@ -36,6 +36,18 @@ func crdWithLabel(name, labelValue string, established bool) string {
 	}`
 }
 
+func crdWithGroup(name, group string, established bool) string {
+	cond := `{"type":"Established","status":"False"}`
+	if established {
+		cond = `{"type":"Established","status":"True"}`
+	}
+	return `{
+		"metadata": {"name": "` + name + `"},
+		"spec": {"group": "` + group + `"},
+		"status": {"conditions": [` + cond + `]}
+	}`
+}
+
 func TestAddonsHealthDiscoversFromCRDs(t *testing.T) {
 	t.Parallel()
 	srv, cs := newCRDTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -47,8 +59,9 @@ func TestAddonsHealthDiscoversFromCRDs(t *testing.T) {
 				` + crdWithLabel("datavolumes.cdi.kubevirt.io", "cdi", true) + `,
 				` + crdWithLabel("networkattachmentdefinitions.k8s.cni.cncf.io", "multus", true) + `,
 				` + crdWithLabel("certificates.cert-manager.io", "cert-manager", true) + `,
-				` + crdWithLabel("some.bare.crd", "", true) + `,
-				` + crdWithLabel("foo.example.com", "failing-addon", false) + `
+				` + crdWithLabel("foo.example.com", "failing-addon", false) + `,
+				` + crdWithGroup("networking.k8s.io", "networking.k8s.io", true) + `,
+				` + crdWithGroup("unknown.example.com", "not-in-aliases.example.com", true) + `
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -77,11 +90,68 @@ func TestAddonsHealthDiscoversFromCRDs(t *testing.T) {
 			t.Fatalf("addon %q: got %q want %q", name, got, status)
 		}
 	}
-	if _, present := byName[""]; present {
-		t.Fatal("CRDs without app.kubernetes.io/name label must be ignored")
+	if _, present := byName["unknown"]; present {
+		t.Fatal("CRDs whose group has no alias must be ignored")
+	}
+	if _, present := byName["networking"]; present {
+		t.Fatal("kubernetes core networking group must not be mapped to an addon")
 	}
 	if got.CheckedAt.IsZero() {
 		t.Fatal("checked_at must be set")
+	}
+}
+
+func TestAliasFromGroup(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		group string
+		want  string
+	}{
+		{"kubevirt.io", "kubevirt"},
+		{"cdi.kubevirt.io", "cdi"},
+		{"k8s.cni.cncf.io", "multus"},
+		{"cert-manager.io", "cert-manager"},
+		{"networking.istio.io", "istio"},
+		{"security.istio.io", "istio"},
+		{"monitoring.coreos.com", "prometheus"},
+		{"tekton.dev", "tekton"},
+		{"argoproj.io", "argocd"},
+		{"networking.k8s.io", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.group, func(t *testing.T) {
+			t.Parallel()
+			if got := aliasFromGroup(c.group); got != c.want {
+				t.Fatalf("aliasFromGroup(%q)=%q want %q", c.group, got, c.want)
+			}
+		})
+	}
+}
+
+func TestResolveAddonName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		labels map[string]string
+		group  string
+		want   string
+	}{
+		{"name wins over group", map[string]string{"app.kubernetes.io/name": "x"}, "kubevirt.io", "x"},
+		{"part-of fallback", map[string]string{"app.kubernetes.io/part-of": "y"}, "kubevirt.io", "y"},
+		{"component fallback", map[string]string{"app.kubernetes.io/component": "z"}, "kubevirt.io", "z"},
+		{"group alias fallback", nil, "kubevirt.io", "kubevirt"},
+		{"nothing matches", nil, "random.example.com", ""},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveAddonName(c.labels, c.group); got != c.want {
+				t.Fatalf("got %q want %q", got, c.want)
+			}
+		})
 	}
 }
 

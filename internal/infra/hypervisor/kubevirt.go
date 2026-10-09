@@ -669,15 +669,61 @@ func (d *KubeVirtDriver) AddonsHealth(ctx context.Context) (*AddonsHealth, error
 	return value, nil
 }
 
+// addonGroupAliases maps a substring of a CRD's spec.group to a short,
+// human-friendly addon name. Entries are checked in order; the first match
+// wins, so the more specific needles (e.g. "cdi.kubevirt.io") must come
+// before the less specific ones (e.g. "kubevirt.io") they are a suffix of.
+// Add a new entry here to teach the dashboard about a new addon that does
+// not carry the Helm labels.
+var addonGroupAliases = []struct {
+	needle string
+	alias  string
+}{
+	{"cdi.kubevirt.io", "cdi"},
+	{"kubevirt.io", "kubevirt"},
+	{"k8s.cni.cncf.io", "multus"},
+	{"cert-manager.io", "cert-manager"},
+	{"istio.io", "istio"},
+	{"monitoring.coreos.com", "prometheus"},
+	{"tekton.dev", "tekton"},
+	{"argoproj.io", "argocd"},
+}
+
+func aliasFromGroup(group string) string {
+	for _, e := range addonGroupAliases {
+		if strings.Contains(group, e.needle) {
+			return e.alias
+		}
+	}
+	return ""
+}
+
+// resolveAddonName extracts an addon identifier from a CRD, in order:
+//   1. app.kubernetes.io/name
+//   2. app.kubernetes.io/part-of
+//   3. app.kubernetes.io/component
+//   4. A short alias derived from spec.group
+//
+// Returns "" if no identifier is found; the caller skips the CRD.
+func resolveAddonName(labels map[string]string, group string) string {
+	for _, key := range []string{
+		"app.kubernetes.io/name",
+		"app.kubernetes.io/part-of",
+		"app.kubernetes.io/component",
+	} {
+		if v := labels[key]; v != "" {
+			return v
+		}
+	}
+	return aliasFromGroup(group)
+}
+
 // probeAddons discovers cluster addons dynamically by listing every
-// CustomResourceDefinition and grouping by the `app.kubernetes.io/name` label,
-// the standard Helm/Kustomize convention used by KubeVirt, CDI, Multus,
-// cert-manager and the virtfoundry operator. CRDs without that label are
-// ignored. Each unique label value becomes one AddonHealth entry with status
-// 'ok' when at least one CRD with that name is Established, 'degraded'
-// otherwise. The probe fails soft: any error (Forbidden, timeout, missing
-// CRD list permission) returns an empty list rather than failing the
-// dashboard, so the caller can render nothing instead of a misleading state.
+// CustomResourceDefinition, resolving an identifier through Helm labels
+// (name/part-of/component) with a fallback to a group-prefix alias, and
+// grouping by that identifier. CRDs with no resolvable name are ignored.
+// The probe fails soft: any error (Forbidden, timeout, missing CRD list
+// permission) returns an empty list rather than failing the dashboard.
 func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
 	out := &AddonsHealth{
 		Addons:    []AddonHealth{},
@@ -703,6 +749,9 @@ func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
 				Name   string            `json:"name"`
 				Labels map[string]string `json:"labels"`
 			} `json:"metadata"`
+			Spec struct {
+				Group string `json:"group"`
+			} `json:"spec"`
 			Status struct {
 				Conditions []struct {
 					Type   string `json:"type"`
@@ -719,7 +768,7 @@ func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
 	established := map[string]bool{}
 	seen := map[string]struct{}{}
 	for _, crd := range list.Items {
-		name := crd.Metadata.Labels["app.kubernetes.io/name"]
+		name := resolveAddonName(crd.Metadata.Labels, crd.Spec.Group)
 		if name == "" {
 			continue
 		}
