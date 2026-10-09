@@ -88,6 +88,7 @@ const ADDON_LABEL_KEY: Record<string, TranslationKey> = {
   multus: 'dashboard.addonsMultus',
   'metrics-server': 'dashboard.addonsMetricsServer',
   networking: 'dashboard.addonsNetworking',
+  'cert-manager': 'dashboard.addonsCertManager',
 };
 
 function addonTone(status: string): { dot: string; pulse: boolean; labelKey: TranslationKey } {

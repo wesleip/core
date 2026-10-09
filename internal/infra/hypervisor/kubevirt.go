@@ -682,6 +682,7 @@ func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
 		{"multus", "k8s.cni.cncf.io/v1"},
 		{"metrics-server", "metrics.k8s.io/v1beta1"},
 		{"networking", "virtfoundry.io/v1alpha1"},
+		{"cert-manager", "cert-manager.io/v1"},
 	}
 
 	out := &AddonsHealth{

@@ -40,7 +40,7 @@ func TestAddonsHealthFakeClientAllReported(t *testing.T) {
 	for _, a := range got.Addons {
 		names[a.Name] = a.Status
 	}
-	for _, want := range []string{"kubevirt", "cdi", "multus", "metrics-server", "networking"} {
+	for _, want := range []string{"kubevirt", "cdi", "multus", "metrics-server", "networking", "cert-manager"} {
 		if _, ok := names[want]; !ok {
 			t.Fatalf("addon %q missing from probe list", want)
 		}
