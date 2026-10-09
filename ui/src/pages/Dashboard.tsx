@@ -14,8 +14,6 @@ import { getRecentActions } from '../lib/preview-prefs';
 import { ComingSoonBadge } from '../components/ComingSoonBadge';
 import { useMemo } from 'react';
 import {
-  POLL_WS_HEALTHY_SLOW_MS,
-  realtimePollInterval,
   useRealtimeConnected,
 } from '../hooks/useRealtimeEvents';
 
@@ -53,14 +51,11 @@ export function Dashboard() {
     queryKey: queryKeys.dashboardSummary,
     queryFn: getDashboardSummary,
     enabled,
-    refetchInterval: (q) => {
-      const health = q.state.data?.health;
-      const unhealthy = health === 'warning' || health === 'critical';
-      return realtimePollInterval(wsConnected, unhealthy, {
-        downMs: 5_000,
-        healthyMs: POLL_WS_HEALTHY_SLOW_MS,
-      });
-    },
+    // Cluster usage comes from metrics.k8s.io polled every ~15s — there is no
+    // platform event for it, so the dashboard must keep polling regardless of
+    // /ws/events health. The WS still invalidates VM counts on transitions
+    // (see lib/realtime-invalidation), so the two paths compose.
+    refetchInterval: () => (wsConnected ? 10_000 : 5_000),
   });
 
   const vms = summary?.vms ?? { total: 0, running: 0, error: 0 };
