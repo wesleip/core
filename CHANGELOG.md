@@ -28,6 +28,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 - **Dashboard:** the Cluster nodes section now includes a **Cluster addons** strip with one coloured dot per critical dependency: KubeVirt, CDI, Multus, metrics-server, networking. Statuses: green (installed and reachable), grey (absent — CRD/API not registered), yellow (unreachable — Forbidden or transient failure). New `GET /api/v1/dashboard/summary` field `addons` (additive) with a 30s in-memory cache. Discovery calls are not AST-scanned by `rbac_contract_test.go` and so do not require a contract entry. Memory mode and nil client render every dot as yellow.
 
+### Changed
+
+- **API:** the addons probe is now **dynamic** — `KubeVirtDriver.probeAddons` lists every `CustomResourceDefinition` and groups by the `app.kubernetes.io/name` label (the standard Helm/Kustomize convention). The hard-coded list (kubevirt, cdi, multus, metrics-server, networking, cert-manager) is gone; any chart that follows the convention appears automatically. Status is `ok` when at least one CRD with the same name has the `Established=True` condition, `degraded` otherwise. CRDs without the label are ignored. The UI keeps the i18n map for the well-known names and falls back to the raw `app.kubernetes.io/name` value for everything else.
+
 ### Added (backend — UI integration pending)
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.

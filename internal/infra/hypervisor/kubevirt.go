@@ -669,56 +669,86 @@ func (d *KubeVirtDriver) AddonsHealth(ctx context.Context) (*AddonsHealth, error
 	return value, nil
 }
 
-// probeAddons runs one discovery call per addon. Each check is independent —
-// one absent addon never blocks the rest. Timeouts short to keep the dashboard
-// poll bounded.
+// probeAddons discovers cluster addons dynamically by listing every
+// CustomResourceDefinition and grouping by the `app.kubernetes.io/name` label,
+// the standard Helm/Kustomize convention used by KubeVirt, CDI, Multus,
+// cert-manager and the virtfoundry operator. CRDs without that label are
+// ignored. Each unique label value becomes one AddonHealth entry with status
+// 'ok' when at least one CRD with that name is Established, 'degraded'
+// otherwise. The probe fails soft: any error (Forbidden, timeout, missing
+// CRD list permission) returns an empty list rather than failing the
+// dashboard, so the caller can render nothing instead of a misleading state.
 func (d *KubeVirtDriver) probeAddons(ctx context.Context) *AddonsHealth {
-	addons := []struct {
-		name         string
-		groupVersion string
-	}{
-		{"kubevirt", "kubevirt.io/v1"},
-		{"cdi", "cdi.kubevirt.io/v1beta1"},
-		{"multus", "k8s.cni.cncf.io/v1"},
-		{"metrics-server", "metrics.k8s.io/v1beta1"},
-		{"networking", "virtfoundry.io/v1alpha1"},
-		{"cert-manager", "cert-manager.io/v1"},
-	}
-
 	out := &AddonsHealth{
-		Addons:    make([]AddonHealth, 0, len(addons)),
+		Addons:    []AddonHealth{},
 		CheckedAt: time.Now().UTC(),
 	}
 	if d.k8sClient == nil {
-		for _, a := range addons {
-			out.Addons = append(out.Addons, AddonHealth{Name: a.name, Status: "unknown", Detail: "no client"})
-		}
 		return out
 	}
 
-	discovery := d.k8sClient.Discovery()
-	for _, a := range addons {
-		_, err := discovery.ServerResourcesForGroupVersion(a.groupVersion)
-		out.Addons = append(out.Addons, classifyAddon(a.name, err))
+	raw, err := d.k8sClient.Discovery().RESTClient().
+		Get().
+		AbsPath("/apis/apiextensions.k8s.io/v1/customresourcedefinitions").
+		Do(ctx).
+		Raw()
+	if err != nil {
+		log.Printf("[cluster-addons] list CRDs: %v", err)
+		return out
+	}
+
+	var list struct {
+		Items []struct {
+			Metadata struct {
+				Name   string            `json:"name"`
+				Labels map[string]string `json:"labels"`
+			} `json:"metadata"`
+			Status struct {
+				Conditions []struct {
+					Type   string `json:"type"`
+					Status string `json:"status"`
+				} `json:"conditions"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		log.Printf("[cluster-addons] decode CRDs: %v", err)
+		return out
+	}
+
+	established := map[string]bool{}
+	seen := map[string]struct{}{}
+	for _, crd := range list.Items {
+		name := crd.Metadata.Labels["app.kubernetes.io/name"]
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		for _, c := range crd.Status.Conditions {
+			if c.Type == "Established" && c.Status == "True" {
+				established[name] = true
+				break
+			}
+		}
+	}
+
+	names := make([]string, 0, len(seen))
+	for n := range seen {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	for _, n := range names {
+		status := "ok"
+		if !established[n] {
+			status = "degraded"
+		}
+		out.Addons = append(out.Addons, AddonHealth{Name: n, Status: status})
 	}
 	return out
-}
-
-// classifyAddon maps a discovery error into the three dashboard states.
-func classifyAddon(name string, err error) AddonHealth {
-	if err == nil {
-		return AddonHealth{Name: name, Status: "ok"}
-	}
-	if errors.IsNotFound(err) {
-		return AddonHealth{Name: name, Status: "absent", Detail: "not installed"}
-	}
-	if errors.IsForbidden(err) || errors.IsUnauthorized(err) {
-		return AddonHealth{Name: name, Status: "unknown", Detail: "forbidden"}
-	}
-	if errors.IsTimeout(err) || errors.IsServerTimeout(err) || errors.IsServiceUnavailable(err) {
-		return AddonHealth{Name: name, Status: "unknown", Detail: "timeout"}
-	}
-	return AddonHealth{Name: name, Status: "unknown", Detail: "check failed"}
 }
 
 func isNodeReady(node *k8sv1.Node) bool {

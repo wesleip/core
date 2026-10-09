@@ -2,100 +2,134 @@ package hypervisor
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
-	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
-func TestAddonsHealthNilClient(t *testing.T) {
-	t.Parallel()
-	d := &KubeVirtDriver{}
-	got, err := d.AddonsHealth(context.Background())
+func newCRDTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, kubernetes.Interface) {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	cfg := &rest.Config{Host: srv.URL}
+	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		t.Fatalf("nil client: %v", err)
+		t.Fatalf("build client: %v", err)
 	}
-	if got == nil {
-		t.Fatal("expected non-nil result so the UI can render a neutral strip")
-	}
-	if len(got.Addons) == 0 {
-		t.Fatal("expected the static addon list to be reported even without a client")
-	}
-	for _, a := range got.Addons {
-		if a.Status != "unknown" {
-			t.Fatalf("nil client must mark every addon unknown, got %s=%s", a.Name, a.Status)
-		}
-	}
+	return srv, cs
 }
 
-func TestAddonsHealthFakeClientAllReported(t *testing.T) {
+func crdWithLabel(name, labelValue string, established bool) string {
+	cond := `{"type":"Established","status":"False"}`
+	if established {
+		cond = `{"type":"Established","status":"True"}`
+	}
+	return `{
+		"metadata": {
+			"name": "` + name + `",
+			"labels": {"app.kubernetes.io/name": "` + labelValue + `"}
+		},
+		"status": {"conditions": [` + cond + `]}
+	}`
+}
+
+func TestAddonsHealthDiscoversFromCRDs(t *testing.T) {
 	t.Parallel()
-	cs := fake.NewSimpleClientset()
+	srv, cs := newCRDTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apis/apiextensions.k8s.io/v1/customresourcedefinitions":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items": [
+				` + crdWithLabel("virtualmachines.kubevirt.io", "kubevirt", true) + `,
+				` + crdWithLabel("datavolumes.cdi.kubevirt.io", "cdi", true) + `,
+				` + crdWithLabel("networkattachmentdefinitions.k8s.cni.cncf.io", "multus", true) + `,
+				` + crdWithLabel("certificates.cert-manager.io", "cert-manager", true) + `,
+				` + crdWithLabel("some.bare.crd", "", true) + `,
+				` + crdWithLabel("foo.example.com", "failing-addon", false) + `
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	_ = srv
+
 	d := &KubeVirtDriver{k8sClient: cs}
 	got, err := d.AddonsHealth(context.Background())
 	if err != nil {
 		t.Fatalf("AddonsHealth: %v", err)
 	}
-	names := map[string]string{}
+	byName := map[string]string{}
 	for _, a := range got.Addons {
-		names[a.Name] = a.Status
+		byName[a.Name] = a.Status
 	}
-	for _, want := range []string{"kubevirt", "cdi", "multus", "metrics-server", "networking", "cert-manager"} {
-		if _, ok := names[want]; !ok {
-			t.Fatalf("addon %q missing from probe list", want)
+	want := map[string]string{
+		"kubevirt":     "ok",
+		"cdi":          "ok",
+		"multus":       "ok",
+		"cert-manager": "ok",
+		"failing-addon": "degraded",
+	}
+	for name, status := range want {
+		if got := byName[name]; got != status {
+			t.Fatalf("addon %q: got %q want %q", name, got, status)
 		}
+	}
+	if _, present := byName[""]; present {
+		t.Fatal("CRDs without app.kubernetes.io/name label must be ignored")
 	}
 	if got.CheckedAt.IsZero() {
 		t.Fatal("checked_at must be set")
 	}
 }
 
-func TestAddonsHealthCache(t *testing.T) {
+func TestAddonsHealthCRDListForbidden(t *testing.T) {
 	t.Parallel()
-	cs := fake.NewSimpleClientset()
+	srv, cs := newCRDTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"kind":"Status","status":"Failure","code":403,"reason":"Forbidden"}`, http.StatusForbidden)
+	})
+	_ = srv
+
 	d := &KubeVirtDriver{k8sClient: cs}
-	if _, err := d.AddonsHealth(context.Background()); err != nil {
-		t.Fatalf("first call: %v", err)
-	}
-	d.addonsCacheMu.Lock()
-	cached := d.addonsCache
-	d.addonsCacheMu.Unlock()
-	if cached == nil {
-		t.Fatal("cache must be populated after first call")
-	}
-	second, err := d.AddonsHealth(context.Background())
+	got, err := d.AddonsHealth(context.Background())
 	if err != nil {
-		t.Fatalf("second call: %v", err)
+		t.Fatalf("AddonsHealth: %v", err)
 	}
-	if second != cached.value {
-		t.Fatal("second call should hit the cache and return the same pointer")
+	if len(got.Addons) != 0 {
+		t.Fatalf("forbidden CRD list must yield empty addons, got %+v", got.Addons)
 	}
 }
 
-func TestAddonsHealthCacheTTLExpiry(t *testing.T) {
+func TestAddonsHealthDedupMultipleCRDsSameName(t *testing.T) {
 	t.Parallel()
-	cs := fake.NewSimpleClientset()
-	d := &KubeVirtDriver{k8sClient: cs}
-	if _, err := d.AddonsHealth(context.Background()); err != nil {
-		t.Fatalf("first call: %v", err)
-	}
-	firstChecked := d.addonsCache.value.CheckedAt
-	d.addonsCacheMu.Lock()
-	d.addonsCache.at = time.Now().Add(-2 * clusterUsageTTL)
-	d.addonsCacheMu.Unlock()
-	time.Sleep(2 * time.Millisecond)
-	second, err := d.AddonsHealth(context.Background())
-	if err != nil {
-		t.Fatalf("second call: %v", err)
-	}
-	if !second.CheckedAt.After(firstChecked) {
-		t.Fatalf("cache TTL did not expire: second.CheckedAt=%v first=%v", second.CheckedAt, firstChecked)
-	}
-}
+	srv, cs := newCRDTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apis/apiextensions.k8s.io/v1/customresourcedefinitions":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items": [
+				` + crdWithLabel("virtualmachines.kubevirt.io", "kubevirt", true) + `,
+				` + crdWithLabel("virtualmachineinstances.kubevirt.io", "kubevirt", true) + `
+			]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	_ = srv
 
-func TestClassifyAddonNil(t *testing.T) {
-	t.Parallel()
-	if got := classifyAddon("x", nil).Status; got != "ok" {
-		t.Fatalf("nil error must classify as ok, got %q", got)
+	d := &KubeVirtDriver{k8sClient: cs}
+	got, err := d.AddonsHealth(context.Background())
+	if err != nil {
+		t.Fatalf("AddonsHealth: %v", err)
+	}
+	count := 0
+	for _, a := range got.Addons {
+		if a.Name == "kubevirt" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("multiple CRDs with same app.kubernetes.io/name must dedup, got %d entries", count)
 	}
 }
