@@ -18,6 +18,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 ### Changed
 
 - **UI:** the "(cluster)" suffix on the CPU and Memory capacity labels was making the cards overflow and break into a second line when the sidebar is expanded. Reverted the labels to "Allocatable CPU" / "Allocatable memory" and moved the aggregation hint to a `title` tooltip on the card. The section title "Cluster nodes" already conveys the scope.
+- **UI:** the "Ready nodes" card now shows a small status badge in the top-right corner that summarises cluster node health at a glance: green "All ready" when every node is Ready, yellow "N degraded" when some are not, red "None ready" when zero are. The badge reuses the same colour tokens as the dashboard "Health" card. No new card, no new data — it just lifts `nodes` / `nodes_ready` from the existing payload.
 
 ### Added (backend — UI integration pending)
 

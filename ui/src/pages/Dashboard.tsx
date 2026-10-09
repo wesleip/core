@@ -6,7 +6,7 @@ import { getDashboardSummary } from '../lib/platform-api';
 import { useNeedsTenant } from '../store/hooks';
 import { queryKeys } from '../lib/query-keys';
 import { RefreshingPanel } from '../components/RefreshingPanel';
-import { useI18n } from '../lib/i18n';
+import { useI18n, type TranslationKey } from '../lib/i18n';
 import { PageHeader, SurfaceCard } from '../components/shell';
 
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
@@ -37,6 +37,39 @@ function UsageBar({ pct, label, collectedAt }: { pct: number; label: string; col
         {clamped}% {label}
       </p>
     </div>
+  );
+}
+
+type NodeHealthTone = {
+  badge: string;
+  label: TranslationKey;
+};
+
+function nodeHealth(total: number, ready: number): NodeHealthTone | null {
+  if (total <= 0) return null;
+  if (ready >= total) {
+    return { badge: 'bg-success-muted text-success border-success/20', label: 'dashboard.hostsNodesAllReady' };
+  }
+  if (ready <= 0) {
+    return { badge: 'bg-error-container/30 text-error border-error/30', label: 'dashboard.hostsNodesNoneReady' };
+  }
+  return { badge: 'bg-warning-muted text-warning border-warning/20', label: 'dashboard.hostsNodesSomeDegraded' };
+}
+
+function NodesHealthBadge({ total, ready }: { total: number; ready: number }) {
+  const { t } = useI18n();
+  const tone = nodeHealth(total, ready);
+  if (!tone) return null;
+  const label = tone.label === 'dashboard.hostsNodesSomeDegraded'
+    ? t(tone.label).replace('{n}', String(total - ready))
+    : t(tone.label);
+  return (
+    <span
+      className={`absolute top-0 right-0 px-2 py-0.5 rounded-full font-label-sm border ${tone.badge}`}
+      title={`${ready} / ${total}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -276,7 +309,7 @@ export function Dashboard() {
                       {hosts?.nodes ?? 0}
                     </span>
                   </div>
-                  <div className="flex flex-col items-center text-center gap-1.5">
+                  <div className="relative flex flex-col items-center text-center gap-1.5">
                     <CheckCircle size={20} className="text-tertiary" />
                     <span className="font-label text-on-surface-variant text-[10px] leading-tight">
                       {t('dashboard.hostsNodesReady')}
@@ -284,6 +317,10 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {hosts?.nodes_ready ?? 0}
                     </span>
+                    <NodesHealthBadge
+                      total={hosts?.nodes ?? 0}
+                      ready={hosts?.nodes_ready ?? 0}
+                    />
                   </div>
                   <div
                     className="flex flex-col items-center text-center gap-1.5 min-w-0"
