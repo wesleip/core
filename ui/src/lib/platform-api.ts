@@ -695,6 +695,14 @@ export interface ClusterMetrics {
   os_images: string[];
   os_architectures: string[];
   collected_at: string;
+  usage?: ClusterUsage;
+}
+
+export interface ClusterUsage {
+  cpu_usage_millicores: number;
+  memory_usage_bytes: number;
+  window_seconds: number;
+  collected_at: string;
 }
 
 export interface SearchHit {

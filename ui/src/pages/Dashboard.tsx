@@ -19,6 +19,29 @@ import {
   useRealtimeConnected,
 } from '../hooks/useRealtimeEvents';
 
+function usageTone(pct: number): string {
+  if (pct >= 85) return 'bg-error';
+  if (pct >= 60) return 'bg-warning';
+  return 'bg-primary';
+}
+
+function UsageBar({ pct, label, collectedAt }: { pct: number; label: string; collectedAt?: string }) {
+  const clamped = Math.min(100, Math.max(0, pct));
+  return (
+    <div className="w-full mt-1" title={collectedAt}>
+      <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+        <div
+          className={`${usageTone(clamped)} h-full transition-all duration-500`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-on-surface-variant mt-1 font-data-mono">
+        {clamped}% {label}
+      </p>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { t } = useI18n();
   const needsTenant = useNeedsTenant();
@@ -64,6 +87,15 @@ export function Dashboard() {
     : '';
   const osImage = hosts?.os_images?.[0] ?? '';
   const arch = hosts?.os_architectures?.[0] ?? '';
+  const usage = hosts?.usage;
+  const cpuUsageCores = usage ? (usage.cpu_usage_millicores / 1000).toFixed(1) : null;
+  const memUsageGiB = usage ? Math.round(usage.memory_usage_bytes / (1024 * 1024 * 1024)) : null;
+  const cpuUsagePct = usage && hosts && hosts.cpu_allocatable_millicores > 0
+    ? Math.round((usage.cpu_usage_millicores / hosts.cpu_allocatable_millicores) * 100)
+    : null;
+  const memUsagePct = usage && hosts && hosts.memory_allocatable_bytes > 0
+    ? Math.round((usage.memory_usage_bytes / hosts.memory_allocatable_bytes) * 100)
+    : null;
 
   if (needsTenant) {
     return (
@@ -266,6 +298,20 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {cpuCores}
                     </span>
+                    {cpuUsagePct !== null && cpuUsageCores !== null ? (
+                      <UsageBar
+                        pct={cpuUsagePct}
+                        label={`${t('dashboard.hostsUsage')} · ${cpuUsageCores}`}
+                        collectedAt={usage?.collected_at}
+                      />
+                    ) : (
+                      <span
+                        className="text-[10px] text-on-surface-variant italic"
+                        title={t('dashboard.hostsUsageUnavailable')}
+                      >
+                        {t('dashboard.hostsUsageUnavailable')}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col items-center text-center gap-1.5">
                     <MemoryStick size={20} className="text-primary" />
@@ -275,6 +321,20 @@ export function Dashboard() {
                     <span className="font-headline text-headline-md font-bold text-on-surface">
                       {memGiB} GiB
                     </span>
+                    {memUsagePct !== null && memUsageGiB !== null ? (
+                      <UsageBar
+                        pct={memUsagePct}
+                        label={`${t('dashboard.hostsUsage')} · ${memUsageGiB} GiB`}
+                        collectedAt={usage?.collected_at}
+                      />
+                    ) : (
+                      <span
+                        className="text-[10px] text-on-surface-variant italic"
+                        title={t('dashboard.hostsUsageUnavailable')}
+                      >
+                        {t('dashboard.hostsUsageUnavailable')}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {(kubeletSummary || osImage || arch) && (

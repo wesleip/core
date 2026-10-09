@@ -19,6 +19,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.
 
+### Added (UI — Tier 2 cards)
+
+- **UI:** the Cluster nodes section now renders usage bars in the CPU and Memory cards whenever the backend reports `hosts.usage`. Each bar shows `used / allocatable` and a percentage with a colour ramp: `< 60%` primary, `60–85%` warning, `≥ 85%` error. When `metrics-server` is absent the cards show "metrics-server unavailable" / "metrics-server indisponível" instead of the bar — the endpoint still answers, the dashboard stays usable. PT/EN i18n parity checked by `i18n.test.ts`.
+
 ## [0.11.3] - 2026-10-07
 
 ### Fixed
