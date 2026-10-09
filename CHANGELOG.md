@@ -15,6 +15,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 - **UI:** the dashboard host section is now titled "Cluster nodes" (was "Cluster host"), and the OS label is "OS image" / "Imagem do SO" (was "OS" / "SO"). The data is `Node.Status.NodeInfo.OSImage` from `core/v1/nodes` — i.e. the OS of the cluster nodes that run the workloads, **not** the OS of the developer's machine. In `kind` the value is the kind node image (Debian trixie); in kubeadm on bare metal it is the host OS (e.g. AlmaLinux); in AKS/EKS it is the managed node image (Ubuntu / Amazon Linux). No backend changes, no contract change.
 - **UI:** dashboard capacity labels now read "Allocatable CPU (cluster)" / "Allocatable memory (cluster)" (PT: "CPU alocável (cluster)" / "Memória alocável (cluster)"). The values are the **sum of `Status.Allocatable` across all nodes** — they grow with the node count, not with a single host.
 
+### Changed
+
+- **UI:** the "(cluster)" suffix on the CPU and Memory capacity labels was making the cards overflow and break into a second line when the sidebar is expanded. Reverted the labels to "Allocatable CPU" / "Allocatable memory" and moved the aggregation hint to a `title` tooltip on the card. The section title "Cluster nodes" already conveys the scope.
+
 ### Added (backend — UI integration pending)
 
 - **API:** `GET /api/v1/dashboard/summary` now includes a new optional `hosts.usage` field with cluster-wide `cpu_usage_millicores` and `memory_usage_bytes` aggregated from `metrics.k8s.io/v1beta1/nodes` (served by `metrics-server`). Backend reads via the discovery REST client, caches the result for 30s, and tolerates the API being absent (404), Forbidden (403), or transiently unavailable (5xx, timeout) — the field is omitted and the dashboard renders a degraded state. The chart still has to grant `metrics.k8s.io/nodes` get/list in the API ClusterRole (entry listed under `dynamicClient` in `docs/rbac-contract.yaml`); `metrics-server` is a documented prerequisite. The UI is unchanged in this slice; Tier 1 cards keep their current look.

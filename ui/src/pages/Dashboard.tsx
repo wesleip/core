@@ -285,9 +285,12 @@ export function Dashboard() {
                       {hosts?.nodes_ready ?? 0}
                     </span>
                   </div>
-                  <div className="flex flex-col items-center text-center gap-1.5">
+                  <div
+                    className="flex flex-col items-center text-center gap-1.5 min-w-0"
+                    title={t('dashboard.hostsAllocatableHint')}
+                  >
                     <Cpu size={20} className="text-primary" />
-                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight whitespace-nowrap">
                       {t('dashboard.hostsCpu')}
                     </span>
                     <span className="font-headline text-headline-md font-bold text-on-surface">
@@ -308,9 +311,12 @@ export function Dashboard() {
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-col items-center text-center gap-1.5">
+                  <div
+                    className="flex flex-col items-center text-center gap-1.5 min-w-0"
+                    title={t('dashboard.hostsAllocatableHint')}
+                  >
                     <MemoryStick size={20} className="text-primary" />
-                    <span className="font-label text-on-surface-variant text-[10px] leading-tight">
+                    <span className="font-label text-on-surface-variant text-[10px] leading-tight whitespace-nowrap">
                       {t('dashboard.hostsMemory')}
                     </span>
                     <span className="font-headline text-headline-md font-bold text-on-surface">
