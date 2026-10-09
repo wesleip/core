@@ -92,7 +92,7 @@ const ADDON_LABEL_KEY: Record<string, TranslationKey> = {
 
 function addonTone(status: string): { dot: string; pulse: boolean; labelKey: TranslationKey } {
   if (status === 'ok') return { dot: 'bg-success', pulse: true, labelKey: 'dashboard.addonsStatusOk' };
-  if (status === 'absent') return { dot: 'bg-on-surface-variant/30', pulse: false, labelKey: 'dashboard.addonsStatusAbsent' };
+  if (status === 'absent') return { dot: 'bg-transparent border border-on-surface-variant/60', pulse: false, labelKey: 'dashboard.addonsStatusAbsent' };
   return { dot: 'bg-warning', pulse: true, labelKey: 'dashboard.addonsStatusUnknown' };
 }
 
