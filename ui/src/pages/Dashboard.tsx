@@ -90,10 +90,10 @@ const ADDON_LABEL_KEY: Record<string, TranslationKey> = {
   networking: 'dashboard.addonsNetworking',
 };
 
-function addonTone(status: string): { dot: string; labelKey: TranslationKey } {
-  if (status === 'ok') return { dot: 'bg-success', labelKey: 'dashboard.addonsStatusOk' };
-  if (status === 'absent') return { dot: 'bg-on-surface-variant/30', labelKey: 'dashboard.addonsStatusAbsent' };
-  return { dot: 'bg-warning', labelKey: 'dashboard.addonsStatusUnknown' };
+function addonTone(status: string): { dot: string; pulse: boolean; labelKey: TranslationKey } {
+  if (status === 'ok') return { dot: 'bg-success', pulse: true, labelKey: 'dashboard.addonsStatusOk' };
+  if (status === 'absent') return { dot: 'bg-on-surface-variant/30', pulse: false, labelKey: 'dashboard.addonsStatusAbsent' };
+  return { dot: 'bg-warning', pulse: true, labelKey: 'dashboard.addonsStatusUnknown' };
 }
 
 function AddonsHealthStrip({ addons }: { addons: { addons: Array<{ name: string; status: string; detail?: string }>; checked_at: string } }) {
@@ -118,7 +118,7 @@ function AddonsHealthStrip({ addons }: { addons: { addons: Array<{ name: string;
               className="inline-flex items-center gap-1.5"
               title={a.detail ?? statusLabel}
             >
-              <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+              <span className={`w-2 h-2 rounded-full ${tone.dot} ${tone.pulse ? 'animate-vf-pulse' : ''}`} />
               <span className="text-xs text-on-surface-variant font-data-mono">
                 {label}
               </span>
