@@ -10,6 +10,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning: [Se
 
 - **Dashboard:** the `/dashboard` page now surfaces Kubernetes host telemetry (node count, ready nodes, allocatable CPU and memory, distinct kubelet versions and OS image) sourced from `core/v1/nodes` via the `KubeVirtDriver`. The new `GET /api/v1/dashboard/summary` field `hosts` is additive; older clients keep working. The section renders a disabled state when the cluster is unreachable (Forbidden, RBAC, no kubeconfig) so the endpoint never 500s. Tier 1 only — no new dependency.
 
+### Changed
+
+- **UI:** the dashboard host section is now titled "Cluster nodes" (was "Cluster host"), and the OS label is "OS image" / "Imagem do SO" (was "OS" / "SO"). The data is `Node.Status.NodeInfo.OSImage` from `core/v1/nodes` — i.e. the OS of the cluster nodes that run the workloads, **not** the OS of the developer's machine. In `kind` the value is the kind node image (Debian trixie); in kubeadm on bare metal it is the host OS (e.g. AlmaLinux); in AKS/EKS it is the managed node image (Ubuntu / Amazon Linux). No backend changes, no contract change.
+
 ## [0.11.3] - 2026-10-07
 
 ### Fixed
