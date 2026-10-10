@@ -258,6 +258,7 @@ func (s *Service) DeployVM(ctx context.Context, tenantID string, in DeployVMInpu
 		Template: firstNonEmpty(tmplDisplay, templateLabel(image)), Hypervisor: "KubeVirt",
 		ServiceOfferingID: in.ServiceOfferingID,
 		NICs:              vmNics,
+		Tags:              in.Tags,
 		CreatedAt:         store.Now(),
 	}
 	if deployTmpl != nil {
