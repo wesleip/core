@@ -135,19 +135,18 @@ func InstanceToUnstructured(vm *platform.PlatformVM, tenantSlug, offeringCR, tem
 	if ud := strings.TrimSpace(vm.CloudInitUserData); ud != "" {
 		spec["cloudInitUserData"] = ud
 	}
-	if len(vm.Tags) > 0 {
-		tags := make([]interface{}, 0, len(vm.Tags))
-		for _, tag := range vm.Tags {
-			tag = strings.TrimSpace(tag)
-			if tag == "" {
-				continue
-			}
-			tags = append(tags, tag)
+	// Always write spec.tags (even empty) so clearing all tags on update
+	// actually removes them from the Instance CR. SaveVM hydrates vm from the
+	// store first, so an empty slice here means "no tags", not "unspecified".
+	tags := make([]interface{}, 0, len(vm.Tags))
+	for _, tag := range vm.Tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
 		}
-		if len(tags) > 0 {
-			spec["tags"] = tags
-		}
+		tags = append(tags, tag)
 	}
+	spec["tags"] = tags
 	if imp := importMeta(vm.ExternalUUID, vm.ImportSource); imp != nil {
 		spec["import"] = imp
 	}

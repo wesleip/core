@@ -62,7 +62,7 @@ export function VMDetail() {
   const [snapshotModal, setSnapshotModal] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const [editForm, setEditForm] = useState({ display_name: '', offering: '' });
+  const [editForm, setEditForm] = useState({ display_name: '', offering: '', tags: [] as string[] });
   const [logText, setLogText] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
   const [attachVolumeId, setAttachVolumeId] = useState('');
@@ -148,8 +148,9 @@ export function VMDetail() {
   });
   const updateMutation = useMutation({
     mutationFn: () => {
-      const payload: { display_name?: string; service_offering_id?: string } = {
+      const payload: { display_name?: string; service_offering_id?: string; tags?: string[] } = {
         display_name: editForm.display_name,
+        tags: editForm.tags,
       };
       // Offering resize only when stopped; display_name always allowed.
       if (isVmStopped(data?.vm?.state) && editForm.offering) {
@@ -424,6 +425,7 @@ export function VMDetail() {
                     setEditForm({
                       display_name: vm.display_name || vm.name,
                       offering: resolveOfferingId(vm),
+                      tags: vm.tags || [],
                     });
                     setEditMode(true);
                   }}
@@ -472,6 +474,20 @@ export function VMDetail() {
                   )}
                   <p className="text-xs text-on-surface-variant mt-2">{t('vmDetail.renameHint')}</p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t('vmDetail.tags')}</label>
+                  <input
+                    type="text"
+                    value={editForm.tags.join(', ')}
+                    onChange={(e) => setEditForm({
+                      ...editForm,
+                      tags: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })}
+                    className={formInputClass}
+                    placeholder="web-server, production"
+                  />
+                  <p className="text-xs text-on-surface-variant mt-1">{t('vmDetail.tagsHint')}</p>
+                </div>
               </div>
             ) : (
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
@@ -485,6 +501,7 @@ export function VMDetail() {
                 <div><dt className="text-on-surface-variant">Template</dt><dd className="text-on-surface">{vm.template || '—'}</dd></div>
                 <div><dt className="text-on-surface-variant">{t('common.image')}</dt><dd className="font-data-mono text-xs break-all text-on-surface">{vm.image || '—'}</dd></div>
                 <div><dt className="text-on-surface-variant">{t('vmDetail.serviceOffering')}</dt><dd className="text-on-surface">{resolveOfferingLabel(vm)}</dd></div>
+                <div><dt className="text-on-surface-variant">{t('vmDetail.tags')}</dt><dd className="text-on-surface">{vm.tags && vm.tags.length ? vm.tags.join(', ') : '—'}</dd></div>
                 <div><dt className="text-on-surface-variant">vCPUs</dt><dd className="text-on-surface">{vm.cpu > 0 ? vm.cpu : '—'}</dd></div>
                 <div><dt className="text-on-surface-variant">RAM</dt><dd className="text-on-surface">{fmtMem(vm.memory_mi) || '—'}</dd></div>
                 <div><dt className="text-on-surface-variant">{t('vmDetail.primaryIp')}</dt><dd className="font-data-mono text-on-surface">{vm.ip || '—'}</dd></div>

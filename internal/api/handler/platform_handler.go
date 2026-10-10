@@ -679,10 +679,11 @@ func (h *PlatformHandler) UpdateVM(w http.ResponseWriter, r *http.Request) {
 	}
 	name := mux.Vars(r)["name"]
 	var req struct {
-		DisplayName       string `json:"display_name"`
-		CPU               int    `json:"cpu"`
-		MemoryMi          int64  `json:"memory_mi"`
-		ServiceOfferingID string `json:"service_offering_id"`
+		DisplayName       string    `json:"display_name"`
+		CPU               int       `json:"cpu"`
+		MemoryMi          int64     `json:"memory_mi"`
+		ServiceOfferingID string    `json:"service_offering_id"`
+		Tags              *[]string `json:"tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid body"}`, http.StatusBadRequest)
@@ -693,6 +694,7 @@ func (h *PlatformHandler) UpdateVM(w http.ResponseWriter, r *http.Request) {
 		CPU:               req.CPU,
 		MemoryMi:          req.MemoryMi,
 		ServiceOfferingID: req.ServiceOfferingID,
+		Tags:              req.Tags,
 	})
 	if err != nil {
 		respondError(w, err)

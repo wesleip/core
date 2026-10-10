@@ -290,6 +290,7 @@ export async function updateVM(name: string, data: {
   cpu?: number;
   memory_mi?: number;
   service_offering_id?: string;
+  tags?: string[];
 }) {
   return platformFetch<{ vm: PlatformVM }>(`/vms/${encodeURIComponent(name)}`, {
     method: 'PATCH',

@@ -99,6 +99,9 @@ type UpdateVMInput struct {
 	CPU               int
 	MemoryMi          int64
 	ServiceOfferingID string
+	// Tags is nil when the caller did not include tags in the request; a
+	// non-nil value (including an empty slice) replaces the VM's tags.
+	Tags *[]string
 }
 
 func (s *Service) ListVMTemplates(tenantID string) []*platform.VMTemplate {
@@ -336,6 +339,9 @@ func (s *Service) UpdateVM(ctx context.Context, tenantID, name string, in Update
 		}
 		vm.CPU = cpu
 		vm.MemoryMi = mem
+	}
+	if in.Tags != nil {
+		vm.Tags = *in.Tags
 	}
 	vm.UpdatedAt = store.Now()
 	s.store.SaveVM(vm)
