@@ -73,6 +73,9 @@ func MergePlatformVM(dst, prior, fromCR *platform.PlatformVM) {
 	if dst.CloudInitUserData == "" && prior.CloudInitUserData != "" {
 		dst.CloudInitUserData = prior.CloudInitUserData
 	}
+	if len(dst.Tags) == 0 && len(prior.Tags) > 0 {
+		dst.Tags = prior.Tags
+	}
 }
 
 func InstanceToUnstructured(vm *platform.PlatformVM, tenantSlug, offeringCR, templateCR string, networkRefs map[string]string) *unstructured.Unstructured {
