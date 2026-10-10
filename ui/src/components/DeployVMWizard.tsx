@@ -78,6 +78,7 @@ type FormState = {
   security_group_ids: string[];
   ssh_key_id: string;
   data_volume_id: string;
+  tags: string[];
 };
 
 const emptyForm = (): FormState => ({
@@ -91,6 +92,7 @@ const emptyForm = (): FormState => ({
   security_group_ids: [],
   ssh_key_id: '',
   data_volume_id: '',
+  tags: [],
 });
 
 type Props = {
@@ -169,6 +171,7 @@ export function DeployVMWizard({ open, onClose, cloneFrom = null }: Props) {
       name: baseName,
       template_id: tmpl?.id || f.template_id,
       offering: cloneFrom.service_offering_id || f.offering,
+      tags: cloneFrom.tags || [],
     }));
     setStep('compute');
   }, [open, cloneFrom, templates]);
@@ -330,6 +333,7 @@ export function DeployVMWizard({ open, onClose, cloneFrom = null }: Props) {
       ...(linux ? { ssh_key_id: form.ssh_key_id } : {}),
       ...(linux && form.data_volume_id ? { data_volume_id: form.data_volume_id } : {}),
       ...(cloudInit ? { cloud_init_user_data: cloudInit } : {}),
+      ...(form.tags.length ? { tags: form.tags } : {}),
     });
   };
 
@@ -601,6 +605,20 @@ export function DeployVMWizard({ open, onClose, cloneFrom = null }: Props) {
                   )}
                 </div>
                 <div>
+                  <label className="block text-sm font-medium mb-1">{t('vms.tags')}</label>
+                  <input
+                    type="text"
+                    value={form.tags.join(', ')}
+                    onChange={(e) => setForm({
+                      ...form,
+                      tags: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })}
+                    className={formInputClass}
+                    placeholder="web-server, production"
+                  />
+                  <p className="text-xs text-on-surface-variant mt-1">{t('vms.tagsHint')}</p>
+                </div>
+                <div>
                   <label className="block text-sm font-medium mb-1">{t('vms.offering')}</label>
                   <select
                     value={form.offering}
@@ -866,6 +884,12 @@ export function DeployVMWizard({ open, onClose, cloneFrom = null }: Props) {
                     <div>
                       <dt className="text-on-surface-variant">SSH</dt>
                       <dd>{sshKeys.find((k) => k.id === form.ssh_key_id)?.name || '—'}</dd>
+                    </div>
+                  )}
+                  {form.tags.length > 0 && (
+                    <div>
+                      <dt className="text-on-surface-variant">{t('vms.tags')}</dt>
+                      <dd>{form.tags.join(', ')}</dd>
                     </div>
                   )}
                   {costEstimate && (

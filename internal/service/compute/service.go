@@ -89,7 +89,8 @@ type DeployVMInput struct {
 	DataVolumeID      string
 	BootDiskSizeGi    int
 	ExposeSSH         bool
-	DedicatedCPU      bool // Guaranteed CPU (request=limit); default shares via KubeVirt ratio
+	DedicatedCPU      bool     // Guaranteed CPU (request=limit); default shares via KubeVirt ratio
+	Tags              []string // user-defined labels applied to the Instance CR
 }
 
 // UpdateVMInput patches VM metadata and resources.

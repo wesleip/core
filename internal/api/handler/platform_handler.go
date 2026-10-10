@@ -872,6 +872,7 @@ func (h *PlatformHandler) DeployVM(w http.ResponseWriter, r *http.Request) {
 		DataVolumeID      string   `json:"data_volume_id"`
 		ExposeSSH         bool     `json:"expose_ssh"`
 		DedicatedCPU      bool     `json:"dedicated_cpu"`
+		Tags              []string `json:"tags"`
 		Async             bool     `json:"async"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -888,6 +889,7 @@ func (h *PlatformHandler) DeployVM(w http.ResponseWriter, r *http.Request) {
 		CloudInitUserData: req.CloudInitUserData,
 		DataVolumeID:      req.DataVolumeID, ExposeSSH: req.ExposeSSH,
 		DedicatedCPU: req.DedicatedCPU,
+		Tags:         req.Tags,
 	}
 	if req.Async {
 		payload, _ := json.Marshal(in)

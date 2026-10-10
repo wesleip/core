@@ -132,6 +132,19 @@ func InstanceToUnstructured(vm *platform.PlatformVM, tenantSlug, offeringCR, tem
 	if ud := strings.TrimSpace(vm.CloudInitUserData); ud != "" {
 		spec["cloudInitUserData"] = ud
 	}
+	if len(vm.Tags) > 0 {
+		tags := make([]interface{}, 0, len(vm.Tags))
+		for _, tag := range vm.Tags {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			tags = append(tags, tag)
+		}
+		if len(tags) > 0 {
+			spec["tags"] = tags
+		}
+	}
 	if imp := importMeta(vm.ExternalUUID, vm.ImportSource); imp != nil {
 		spec["import"] = imp
 	}
@@ -256,6 +269,24 @@ func InstanceFromUnstructured(obj *unstructured.Unstructured, tenantID string, r
 	}
 	if cloudInit != "" {
 		vm.CloudInitUserData = cloudInit
+	}
+	if tagsRaw, found, err := unstructured.NestedSlice(obj.Object, "spec", "tags"); err != nil {
+		return nil, fieldError("spec.tags", err)
+	} else if found && len(tagsRaw) > 0 {
+		tags := make([]string, 0, len(tagsRaw))
+		for _, raw := range tagsRaw {
+			tag, ok := raw.(string)
+			if !ok {
+				continue
+			}
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+		if len(tags) > 0 {
+			vm.Tags = tags
+		}
 	}
 	return vm, nil
 }
